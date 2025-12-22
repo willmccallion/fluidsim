@@ -1,9 +1,14 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include "fluid.h"
+#include "raylib.h"
+#include "simulation.h"
 
-// Draws the fluid density field using fire colors
-void Render_Fluid(Fluid *fluid, int scale);
+typedef struct {
+  Shader shdRender;
+} FluidRenderer;
+
+FluidRenderer InitFluidRenderer(void);
+void DrawFluidSim(FluidRenderer *renderer, FluidSim *sim, Camera3D camera);
 
 #endif

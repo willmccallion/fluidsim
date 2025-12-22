@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.14)
 project(FluidSimC)
 
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# --- CRITICAL: FORCE OPENGL 4.3 ---
+# This fixes context creation errors on NVIDIA
+set(GRAPHICS GRAPHICS_API_OPENGL_43 CACHE STRING "Force GL 4.3" FORCE)
 
 # --- Raylib Setup ---
 include(FetchContent)
@@ -16,9 +19,13 @@ FetchContent_MakeAvailable(raylib)
 # --- Sources ---
 set(SOURCES
     src/main.c
-    src/fluid.c
+    src/simulation.c
     src/renderer.c
+    src/utils.c
 )
+
+# --- Resources ---
+file(COPY ${CMAKE_SOURCE_DIR}/resources DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Executable ---
 add_executable(fluid_sim ${SOURCES})
@@ -28,7 +35,7 @@ target_include_directories(fluid_sim PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 # --- Link Libraries ---
 if(UNIX AND NOT APPLE)
-    target_link_libraries(fluid_sim PRIVATE raylib m)
+    target_link_libraries(fluid_sim PRIVATE raylib m GL)
 else()
     target_link_libraries(fluid_sim PRIVATE raylib)
 endif()
