@@ -19,8 +19,8 @@ FetchContent_MakeAvailable(raylib)
 # --- Sources ---
 set(SOURCES
     src/main.c
+    src/particles.c
     src/simulation.c
-    src/renderer.c
     src/utils.c
 )
 
