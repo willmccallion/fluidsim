@@ -1,0 +1,51 @@
+[config]
+default = "run"
+
+[vars]
+build_dir = "build"
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+
+[configure]
+group       = "Build"
+description = "Configure cmake (run once or when CMakeLists.txt changes)"
+type        = "file"
+command     = ["cmake", "-B", "build", "-DCMAKE_BUILD_TYPE=Release"]
+inputs      = ["CMakeLists.txt"]
+output      = "build/Makefile"
+
+[build]
+group       = "Build"
+description = "Compile the fluid sim"
+type        = "file"
+deps        = ["configure"]
+command     = ["cmake", "--build", "build", "--parallel"]
+inputs      = ["src/**/*.c", "include/**/*.h", "resources/shaders/**/*.glsl", "resources/shaders/**/*.fs"]
+output      = "build/fluid_sim"
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+[run]
+group       = "Run"
+description = "Build and launch the fluid sim"
+type        = "task"
+deps        = ["build"]
+dir         = "build"
+tty         = true
+command     = ["./fluid_sim"]
+
+# ── Development ───────────────────────────────────────────────────────────────
+
+[shaders]
+group       = "Development"
+description = "Sync shaders to build directory (no recompile needed)"
+type        = "task"
+shell       = true
+command     = ["cp -r resources build/"]
+
+[clean]
+group       = "Development"
+description = "Remove build directory"
+type        = "task"
+shell       = true
+command     = ["rm -rf build/"]
