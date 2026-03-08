@@ -5,6 +5,7 @@ layout(binding = 0, rgba16f) uniform image2D texVel;
 layout(binding = 1, rgba16f) uniform image2D texDens;
 
 uniform float time;
+uniform float windSpeed;
 
 void main() {
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
@@ -13,7 +14,7 @@ void main() {
     // Only run on the Inlet (Left Edge)
     if (coords.x < 10) {
         // 1. Force High Velocity
-        imageStore(texVel, coords, vec4(1200.0, 0.0, 0.0, 0.0));
+        imageStore(texVel, coords, vec4(windSpeed, 0.0, 0.0, 0.0));
 
         // 2. The Smoke "Rake" (Streamlines)
         float numLines = 16.0;

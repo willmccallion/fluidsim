@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "rlgl.h" // Needed for rlActiveTextureSlot
 #include "simulation.h"
+#include <math.h>
 #include <stdio.h>
 
 // --- OpenGL Compatibility Definitions ---
@@ -31,10 +32,12 @@ int main() {
   Shader shdDisplay = LoadShader(0, "resources/shaders/display.fs");
 
   // 3. State Variables
-  // 0 = Standard (RGB), 1 = Pressure Tint, 2 = Velocity Tint
+  // 0 = Standard (RGB), 1 = Pressure Tint, 2 = Velocity Tint, 3 = Curl
   int viewMode = 0;
   bool showParticles = true;
+  bool showHUD = true;
   float time = 0.0f;
+  float brushRadius = 65.0f;
 
 // Graphing Data
 #define GRAPH_WIDTH 300
@@ -59,7 +62,11 @@ int main() {
 
     // Cycle Visualization Modes (V key)
     if (IsKeyPressed(KEY_V))
-      viewMode = (viewMode + 1) % 3;
+      viewMode = (viewMode + 1) % 4;
+
+    // Toggle HUD
+    if (IsKeyPressed(KEY_H))
+      showHUD = !showHUD;
 
     // Reset Modes
     if (IsKeyPressed(KEY_ONE)) {
@@ -70,6 +77,17 @@ int main() {
       ResetSim(&sim, 1);
       sim.enableWindTunnel = true;
     }
+
+    // Wind Speed (F/G keys)
+    if (IsKeyDown(KEY_F))
+      sim.windSpeed = fmaxf(50.0f, sim.windSpeed - 30.0f);
+    if (IsKeyDown(KEY_G))
+      sim.windSpeed = fminf(4000.0f, sim.windSpeed + 30.0f);
+
+    // Brush Size (Scroll Wheel)
+    float scroll = GetMouseWheelMove();
+    if (scroll != 0.0f)
+      brushRadius = fmaxf(10.0f, fminf(300.0f, brushRadius + scroll * 8.0f));
 
     // Mouse Interaction
     Vector2 mPos = GetMousePosition();
@@ -82,18 +100,23 @@ int main() {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
       Vector4 velAdd = {mDelta.x * 20.0f * scaleX, -mDelta.y * 20.0f * scaleY,
                         0.0f, 0.0f};
-      ApplySplat(&sim, sim.texVelocity[sim.ping], simPos, 65.0f, velAdd);
+      ApplySplat(&sim, sim.texVelocity[sim.ping], simPos, brushRadius, velAdd);
 
       // Rainbow Dye
       Color c = ColorFromHSV((float)GetTime() * 100.0f, 0.7f, 0.9f);
       Vector4 colAdd = {(c.r / 255.0f) * 4.0f, (c.g / 255.0f) * 4.0f,
                         (c.b / 255.0f) * 4.0f, 1.0f};
-      ApplySplat(&sim, sim.texDensity[sim.ping], simPos, 65.0f, colAdd);
+      ApplySplat(&sim, sim.texDensity[sim.ping], simPos, brushRadius, colAdd);
     }
 
     // Right Click: Draw Wall
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-      PaintObstacle(&sim, simPos, 20.0f, false);
+      PaintObstacle(&sim, simPos, brushRadius * 0.4f, false);
+    }
+
+    // Middle Click: Erase Wall
+    if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+      PaintObstacle(&sim, simPos, brushRadius * 0.6f, true);
     }
 
     // --- SIMULATION STEP ---
@@ -131,12 +154,18 @@ int main() {
     SetShaderValue(shdDisplay, GetShaderLocation(shdDisplay, "maxVelocity"),
                    &sim.maxVelocitySmooth, SHADER_UNIFORM_FLOAT);
 
+    // Pass maxCurl uniform
+    SetShaderValue(shdDisplay, GetShaderLocation(shdDisplay, "maxCurl"),
+                   &sim.maxCurlSmooth, SHADER_UNIFORM_FLOAT);
+
     // Bind Secondary Texture (Data) to Slot 1
     rlActiveTextureSlot(1);
     if (viewMode == 1)
       glBindTexture(GL_TEXTURE_2D, sim.texPressure[0].id);
     else if (viewMode == 2)
       glBindTexture(GL_TEXTURE_2D, sim.texVelocity[sim.ping].id);
+    else if (viewMode == 3)
+      glBindTexture(GL_TEXTURE_2D, sim.texCurl.id);
     else
       glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -179,73 +208,85 @@ int main() {
     EndBlendMode();
 
     // 4. UI & HUD
-    DrawFPS(10, 10);
+    if (showHUD) {
+      int sw = GetScreenWidth();
+      int sh = GetScreenHeight();
 
-    const char *modeName = "Standard (RGB)";
-    if (viewMode == 1)
-      modeName = "Pressure Tint (Auto-Range)";
-    if (viewMode == 2)
-      modeName = "Velocity Tint (Auto-Range)";
+      // --- Top-left info panel ---
+      int panelX = 12, panelY = 12, panelW = 310, panelH = 110;
+      DrawRectangleRounded((Rectangle){panelX, panelY, panelW, panelH}, 0.12f, 8, (Color){0, 0, 0, 160});
+      DrawRectangleRoundedLines((Rectangle){panelX, panelY, panelW, panelH}, 0.12f, 8, (Color){255, 255, 255, 30});
 
-    DrawText(TextFormat("View: %s (Press V)", modeName), 10, 30, 20, RAYWHITE);
-    DrawText("Space: Particles | W: Wind | 1/2: Reset", 10, 55, 10, GRAY);
+      // FPS
+      DrawText(TextFormat("%d fps", GetFPS()), panelX + 12, panelY + 10, 14, (Color){160, 255, 160, 255});
 
-    // 5. Graphing (Only in Wind Tunnel Mode)
-    if (sim.enableWindTunnel) {
-      char buff[64];
-      sprintf(buff, "Drag: %.2f", smoothedDrag);
-      DrawText(buff, 10, 80, 20, GREEN);
-      sprintf(buff, "Lift: %.2f", forces.y);
-      DrawText(buff, 10, 105, 20, (forces.y < 0) ? SKYBLUE : ORANGE);
+      // View mode
+      const char *modeName = "RGB Density";
+      Color modeColor = RAYWHITE;
+      if (viewMode == 1) { modeName = "Pressure Field"; modeColor = (Color){100, 180, 255, 255}; }
+      if (viewMode == 2) { modeName = "Velocity Field"; modeColor = (Color){255, 200, 80, 255}; }
+      if (viewMode == 3) { modeName = "Vorticity"; modeColor = (Color){255, 100, 180, 255}; }
+      DrawText(TextFormat("VIEW  %s", modeName), panelX + 12, panelY + 30, 16, modeColor);
 
-      // Graph Layout
-      int graphX = 10, graphY = 600, graphH = 120, graphW = GRAPH_WIDTH;
+      // Brush size bar
+      DrawText("BRUSH", panelX + 12, panelY + 54, 11, (Color){150, 150, 150, 255});
+      float bNorm = (brushRadius - 10.0f) / 290.0f;
+      DrawRectangle(panelX + 60, panelY + 54, 220, 10, (Color){40, 40, 40, 255});
+      DrawRectangle(panelX + 60, panelY + 54, (int)(bNorm * 220), 10, (Color){120, 200, 255, 200});
+      DrawText(TextFormat("%.0f", brushRadius), panelX + 285, panelY + 52, 11, (Color){180, 180, 180, 255});
 
-      // Background
-      DrawRectangle(graphX, graphY - graphH, graphW, graphH,
-                    (Color){0, 10, 0, 220});
-      DrawRectangleLines(graphX, graphY - graphH, graphW, graphH, DARKGREEN);
+      // Wind speed bar (only meaningful in wind tunnel mode)
+      const char *windLabel = sim.enableWindTunnel ? "WIND " : "WIND ";
+      Color windBarColor = sim.enableWindTunnel ? (Color){255, 160, 60, 200} : (Color){80, 80, 80, 150};
+      DrawText(windLabel, panelX + 12, panelY + 72, 11, sim.enableWindTunnel ? (Color){255, 160, 60, 255} : (Color){100, 100, 100, 255});
+      float wNorm = (sim.windSpeed - 50.0f) / 3950.0f;
+      DrawRectangle(panelX + 60, panelY + 72, 220, 10, (Color){40, 40, 40, 255});
+      DrawRectangle(panelX + 60, panelY + 72, (int)(wNorm * 220), 10, windBarColor);
+      DrawText(TextFormat("%.0f", sim.windSpeed), panelX + 285, panelY + 70, 11, (Color){180, 180, 180, 255});
 
-      // Find Min/Max for Auto-Scaling
-      float minVal = dragHistory[0], maxVal = dragHistory[0];
-      for (int i = 0; i < GRAPH_WIDTH; i++) {
-        if (dragHistory[i] < minVal)
-          minVal = dragHistory[i];
-        if (dragHistory[i] > maxVal)
-          maxVal = dragHistory[i];
+      // Keybind hint strip
+      DrawText("V view  Scroll brush  F/G wind  W tunnel  Space ptcl  RMB wall  MMB erase  H hide", panelX + 12, panelY + 90, 9, (Color){120, 120, 120, 200});
+
+      // --- Wind Tunnel Telemetry (bottom-left) ---
+      if (sim.enableWindTunnel) {
+        int telX = 12, telY = sh - 160, telW = 320, telH = 148;
+        DrawRectangleRounded((Rectangle){telX, telY, telW, telH}, 0.10f, 8, (Color){0, 0, 0, 160});
+        DrawRectangleRoundedLines((Rectangle){telX, telW, telW, telH}, 0.10f, 8, (Color){255, 255, 255, 25});
+
+        // Drag & Lift values
+        DrawText("AERODYNAMICS", telX + 12, telY + 10, 11, (Color){150, 150, 150, 255});
+        DrawText(TextFormat("Drag  %.3f", smoothedDrag), telX + 12, telY + 28, 18, (Color){255, 100, 80, 255});
+        Color liftColor = forces.y < 0 ? (Color){80, 180, 255, 255} : (Color){255, 200, 60, 255};
+        DrawText(TextFormat("Lift  %.3f", forces.y), telX + 12, telY + 50, 18, liftColor);
+
+        // Graph
+        int graphX = telX + 12, graphY = telY + 140, graphH = 70, graphW = 296;
+        DrawRectangle(graphX, graphY - graphH, graphW, graphH, (Color){10, 10, 20, 200});
+
+        float minVal = dragHistory[0], maxVal = dragHistory[0];
+        for (int i = 0; i < GRAPH_WIDTH; i++) {
+          if (dragHistory[i] < minVal) minVal = dragHistory[i];
+          if (dragHistory[i] > maxVal) maxVal = dragHistory[i];
+        }
+        if (maxVal - minVal < 50.0f) {
+          float center = (maxVal + minVal) * 0.5f;
+          maxVal = center + 25.0f;
+          minVal = center - 25.0f;
+        }
+
+        for (int i = 0; i < GRAPH_WIDTH - 1; i++) {
+          int idx = (graphIdx + i) % GRAPH_WIDTH;
+          int nextIdx = (graphIdx + i + 1) % GRAPH_WIDTH;
+          float norm1 = (dragHistory[idx] - minVal) / (maxVal - minVal);
+          float norm2 = (dragHistory[nextIdx] - minVal) / (maxVal - minVal);
+          int x1 = graphX + (int)((float)i / GRAPH_WIDTH * graphW);
+          int x2 = graphX + (int)((float)(i + 1) / GRAPH_WIDTH * graphW);
+          int y1 = graphY - (int)(fmaxf(0, fminf(1, norm1)) * graphH);
+          int y2 = graphY - (int)(fmaxf(0, fminf(1, norm2)) * graphH);
+          DrawLine(x1, y1, x2, y2, (Color){255, 100, 80, 220});
+        }
+        DrawText("drag history", graphX + 4, graphY - graphH + 4, 9, (Color){100, 100, 100, 200});
       }
-
-      // Enforce minimum range to prevent zoom-on-noise
-      if (maxVal - minVal < 50.0f) {
-        float center = (maxVal + minVal) * 0.5f;
-        maxVal = center + 25.0f;
-        minVal = center - 25.0f;
-      }
-
-      // Draw Graph Lines
-      for (int i = 0; i < GRAPH_WIDTH - 1; i++) {
-        int idx = (graphIdx + i) % GRAPH_WIDTH;
-        int nextIdx = (graphIdx + i + 1) % GRAPH_WIDTH;
-
-        float norm1 = (dragHistory[idx] - minVal) / (maxVal - minVal);
-        float norm2 = (dragHistory[nextIdx] - minVal) / (maxVal - minVal);
-
-        int y1 = graphY - (int)(norm1 * graphH);
-        int y2 = graphY - (int)(norm2 * graphH);
-
-        // Clamp to box
-        if (y1 < graphY - graphH)
-          y1 = graphY - graphH;
-        if (y1 > graphY)
-          y1 = graphY;
-        if (y2 < graphY - graphH)
-          y2 = graphY - graphH;
-        if (y2 > graphY)
-          y2 = graphY;
-
-        DrawLine(graphX + i, y1, graphX + i + 1, y2, GREEN);
-      }
-      DrawText("Drag History", graphX + 5, graphY - graphH + 5, 10, GREEN);
     }
     EndDrawing();
   }

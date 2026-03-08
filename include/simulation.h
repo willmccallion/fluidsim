@@ -27,10 +27,12 @@ typedef struct {
   // Smoothed stats for auto-exposure (prevents flickering)
   float maxPressureSmooth;
   float maxVelocitySmooth;
+  float maxCurlSmooth;
 
   int ping;
   bool enableWindTunnel;
   float buoyancyStrength;
+  float windSpeed;
 } FluidSim;
 
 void InitSim(FluidSim *sim);

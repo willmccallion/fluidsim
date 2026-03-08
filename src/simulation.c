@@ -8,10 +8,12 @@ void InitSim(FluidSim *sim) {
   sim->ping = 0;
   sim->enableWindTunnel = true;
   sim->buoyancyStrength = 8.0f;
+  sim->windSpeed = 1200.0f;
 
   // Initialize Smooth Stats
   sim->maxPressureSmooth = 1.0f;
   sim->maxVelocitySmooth = 1.0f;
+  sim->maxCurlSmooth = 1.0f;
 
   // Create Textures
   sim->texDensity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA16F);
@@ -53,7 +55,7 @@ void InitSim(FluidSim *sim) {
   // Init Stats SSBO
   glGenBuffers(1, &sim->ssboStats);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboStats);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, 2 * sizeof(unsigned int), NULL,
+  glBufferData(GL_SHADER_STORAGE_BUFFER, 3 * sizeof(unsigned int), NULL,
                GL_DYNAMIC_READ);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
@@ -210,6 +212,8 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
                        GL_RGBA16F);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "time"), &time,
                  RL_SHADER_UNIFORM_FLOAT, 1);
+    rlSetUniform(rlGetLocationUniform(sim->shdInlet, "windSpeed"), &sim->windSpeed,
+                 RL_SHADER_UNIFORM_FLOAT, 1);
     rlComputeShaderDispatch(2, (RES_Y + 15) / 16, 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     rlDisableShader();
@@ -279,7 +283,7 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   rlDisableShader();
 
   // --- AUTO-RANGE ANALYSIS ---
-  unsigned int zeroStats[2] = {0, 0};
+  unsigned int zeroStats[3] = {0, 0, 0};
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboStats);
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zeroStats), zeroStats);
 
@@ -288,6 +292,8 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
                      GL_R16F);
   glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_RGBA16F);
+  glBindImageTexture(2, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY,
+                     GL_R16F);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, sim->ssboStats);
   rlSetUniform(rlGetLocationUniform(sim->shdAnalyze, "res"), &res,
                RL_SHADER_UNIFORM_VEC2, 1);
@@ -295,21 +301,23 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   rlDisableShader();
 
-  unsigned int readStats[2];
+  unsigned int readStats[3];
   glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(readStats), readStats);
 
   float rawMaxP = 0.0f;
   float rawMaxV = 0.0f;
+  float rawMaxC = 0.0f;
   memcpy(&rawMaxP, &readStats[0], sizeof(float));
   memcpy(&rawMaxV, &readStats[1], sizeof(float));
+  memcpy(&rawMaxC, &readStats[2], sizeof(float));
 
-  if (rawMaxP < 0.0001f)
-    rawMaxP = 0.0001f;
-  if (rawMaxV < 0.0001f)
-    rawMaxV = 0.0001f;
+  if (rawMaxP < 0.0001f) rawMaxP = 0.0001f;
+  if (rawMaxV < 0.0001f) rawMaxV = 0.0001f;
+  if (rawMaxC < 0.0001f) rawMaxC = 0.0001f;
 
   sim->maxPressureSmooth = sim->maxPressureSmooth * 0.95f + rawMaxP * 0.05f;
   sim->maxVelocitySmooth = sim->maxVelocitySmooth * 0.95f + rawMaxV * 0.05f;
+  sim->maxCurlSmooth     = sim->maxCurlSmooth     * 0.95f + rawMaxC * 0.05f;
 
   // --- Force Calculation ---
   if (sim->enableWindTunnel) {
