@@ -264,7 +264,7 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
 
   // 6. Jacobi
   rlEnableShader(sim->shdJacobi);
-  for (int i = 0; i < 40; i++) {
+  for (int i = 0; i < 80; i++) {
     glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
                        GL_R16F);
     glBindImageTexture(1, sim->texDivergence.id, 0, GL_FALSE, 0, GL_READ_ONLY,
