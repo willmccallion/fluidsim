@@ -106,29 +106,167 @@ void ResetSim(FluidSim *sim, int mode) {
   if (mode == 1) {
     sim->buoyancyStrength = 0.0f;
     float *oData = (float *)calloc(RES_X * RES_Y, sizeof(float));
+
+    // F1 car 2D side-view silhouette
+    // Coordinate system: texture y=0 is BOTTOM of screen (OpenGL convention).
+    // The texture is drawn flipped (DrawTexturePro uses -RES_Y source height).
+    // So: LARGER y = HIGHER on screen.  oy is the car centerline.
+    //
+    // Wind flows left→right. Car nose points LEFT (into wind).
+    float ox = RES_X * 0.20f;   // nose tip x
+    float oy = RES_Y * 0.50f;   // car centerline y
+    float S  = RES_X / 1280.0f; // pixel scale
+
+    // ---- X landmarks (nose=left, rear=right) ----
+    float xNoseTip  = ox;
+    float xNoseRoot = ox + 90*S;
+    float xBodyF    = ox + 90*S;
+    float xCockF    = ox + 110*S;
+    float xCockPeak = ox + 170*S;
+    float xCockR    = ox + 240*S;
+    float xSidepodF = ox + 120*S;
+    float xSidepodR = ox + 310*S;
+    float xBodyR    = ox + 350*S;
+    float xDiffR    = ox + 395*S;
+
+    // ---- Y landmarks (larger y = higher on screen) ----
+    float yBot      = oy - 22*S;   // underfloor (lower on screen)
+    float yTop      = oy + 22*S;   // top of chassis slab (higher on screen)
+    float yNoseB    = oy - 8*S;    // nose bottom
+    float yNoseT    = oy + 8*S;    // nose top
+    float yCockPeak = oy + 54*S;   // cockpit opening peak (above chassis)
+    float ySidepodT = oy + 32*S;   // sidepod top (taller than chassis top)
+    float ySidepodB = oy - 30*S;   // sidepod undercut
+    float yDiffExit = oy - 55*S;   // diffuser exit (kicks down = lower y)
+
+    // ---- Wheels (below chassis = lower y) ----
+    float wR        = 26*S;
+    float xFWheelC  = ox + 55*S;
+    float xRWheelC  = ox + 325*S;
+    float yWheelC   = oy - 46*S;  // below car floor
+
+    // ---- Front wing (below/ahead of nose) ----
+    float xFWingLE  = ox - 55*S;
+    float xFWingTE  = ox + 30*S;
+    float yFWingT   = oy - 30*S;  // top of front wing
+    float yFWingB   = oy - 37*S;  // bottom surface (thin element)
+    float yFWingEP  = oy - 56*S;  // endplate bottom
+
+    // ---- Rear wing (high above car) ----
+    float xRWingLE  = ox + 358*S;
+    float xRWingTE  = ox + 392*S;
+    float yRWingT   = oy + 92*S;  // top of main element
+    float yRWingB   = oy + 76*S;  // bottom of main element
+    float yRWing2T  = oy + 70*S;  // second flap top
+    float yRWing2B  = oy + 62*S;  // second flap bottom
+    float yRWingEP  = oy + 22*S;  // endplate bottom (flush with car top)
+
     for (int y = 0; y < RES_Y; y++) {
       for (int x = 0; x < RES_X; x++) {
-        float cx = RES_X / 4.0f;
-        float cy = RES_Y / 2.0f;
-        float scale = RES_X / 1024.0f;
+        float fx = (float)x;
+        float fy = (float)y;
         bool solid = false;
 
-        if (x > cx - (100 * scale) && x < cx &&
-            fabsf(y - cy) < (15 * scale) + (x - (cx - (100 * scale))) * 0.1)
-          solid = true;
-        if (x >= cx && x < cx + (120 * scale) && fabsf(y - cy) < (25 * scale))
-          solid = true;
-        if (x >= cx + (120 * scale) && x < cx + (140 * scale) &&
-            fabsf(y - cy) < (40 * scale))
-          solid = true;
-        if (x > cx - (60 * scale) && x < cx - (20 * scale) &&
-            (fabsf(y - (cy - (50 * scale))) < (15 * scale) ||
-             fabsf(y - (cy + (50 * scale))) < (15 * scale)))
-          solid = true;
-        if (x > cx + (80 * scale) && x < cx + (120 * scale) &&
-            (fabsf(y - (cy - (50 * scale))) < (15 * scale) ||
-             fabsf(y - (cy + (50 * scale))) < (15 * scale)))
-          solid = true;
+        // --- NOSE CONE (tapered slab, thin at tip) ---
+        if (fx >= xNoseTip && fx < xNoseRoot) {
+          float t = (fx - xNoseTip) / (xNoseRoot - xNoseTip);
+          float ts = t * t * (3.0f - 2.0f * t); // smooth step
+          float lo = yNoseB + ts * (yBot  - yNoseB);
+          float hi = yNoseT + ts * (yTop  - yNoseT);
+          if (fy >= lo && fy <= hi) solid = true;
+        }
+
+        // --- MAIN CHASSIS SLAB ---
+        if (fx >= xBodyF && fx < xSidepodR) {
+          if (fy >= yBot && fy <= yTop) solid = true;
+        }
+
+        // --- SIDEPOD BULGE (wider mid-section) ---
+        if (fx >= xSidepodF && fx < xSidepodR) {
+          float ramp = 40*S;
+          float t = 1.0f;
+          if (fx < xSidepodF + ramp)      t = (fx - xSidepodF) / ramp;
+          else if (fx > xSidepodR - ramp) t = (xSidepodR - fx) / ramp;
+          float lo = yBot  + (ySidepodB - yBot)  * t;  // widens downward
+          float hi = yTop  + (ySidepodT - yTop)  * t;  // widens upward
+          if (fy >= lo && fy <= hi) solid = true;
+        }
+
+        // --- COCKPIT FAIRING (raised hump above chassis) ---
+        if (fx >= xCockF && fx < xCockR) {
+          float t;
+          if (fx < xCockPeak)
+            t = (fx - xCockF) / (xCockPeak - xCockF);
+          else
+            t = 1.0f - (fx - xCockPeak) / (xCockR - xCockPeak);
+          t = t * t * (3.0f - 2.0f * t);
+          float hi = yTop + (yCockPeak - yTop) * t; // rises above yTop
+          if (fy >= yBot && fy <= hi) solid = true;
+        }
+
+        // --- REAR TAPER ---
+        if (fx >= xSidepodR && fx < xBodyR) {
+          float t = (fx - xSidepodR) / (xBodyR - xSidepodR);
+          float lo = yBot + t * 8*S;   // floor rises
+          float hi = yTop - t * 8*S;   // roof drops
+          if (fy >= lo && fy <= hi) solid = true;
+        }
+
+        // --- DIFFUSER (angled ramp, floor drops at rear) ---
+        if (fx >= xBodyR && fx < xDiffR) {
+          float t = (fx - xBodyR) / (xDiffR - xBodyR);
+          float floorY = yBot + t * (yDiffExit - yBot); // floor descends
+          float roofY  = yTop - t * 10*S;
+          if (fy >= floorY && fy <= roofY) solid = true;
+        }
+
+        // --- FRONT WHEELS ---
+        {
+          float dx = fx - xFWheelC, dy = fy - yWheelC;
+          if (dx*dx + dy*dy <= wR*wR) solid = true;
+        }
+
+        // --- REAR WHEELS ---
+        {
+          float dx = fx - xRWheelC, dy = fy - yWheelC;
+          if (dx*dx + dy*dy <= wR*wR) solid = true;
+        }
+
+        // --- FRONT WING: main plane ---
+        if (fx >= xFWingLE && fx < xFWingTE) {
+          float t = (fx - xFWingLE) / (xFWingTE - xFWingLE);
+          float camber = (1.0f - t) * 7*S; // leading edge tips down
+          float lo = yFWingB - camber;
+          float hi = yFWingT - camber;
+          if (fy >= lo && fy <= hi) solid = true;
+        }
+
+        // --- FRONT WING ENDPLATES ---
+        if (fx >= xFWingLE && fx < xFWingLE + 5*S)
+          if (fy >= yFWingEP && fy <= yFWingT) solid = true;
+        if (fx >= xFWingTE - 4*S && fx < xFWingTE + 2*S)
+          if (fy >= yFWingEP && fy <= yFWingT) solid = true;
+
+        // --- REAR WING: main element ---
+        if (fx >= xRWingLE && fx < xRWingTE)
+          if (fy >= yRWingB && fy <= yRWingT) solid = true;
+
+        // --- REAR WING: DRS flap ---
+        if (fx >= xRWingLE + 3*S && fx < xRWingTE - 3*S)
+          if (fy >= yRWing2B && fy <= yRWing2T) solid = true;
+
+        // --- REAR WING ENDPLATES ---
+        if (fx >= xRWingLE && fx < xRWingLE + 5*S)
+          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
+        if (fx >= xRWingTE - 5*S && fx < xRWingTE)
+          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
+
+        // --- REAR WING PYLON ---
+        {
+          float pylonX = (xRWingLE + xRWingTE) * 0.5f;
+          if (fabsf(fx - pylonX) < 3.5f*S)
+            if (fy >= yRWingEP && fy <= yRWing2B) solid = true;
+        }
 
         if (solid)
           oData[y * RES_X + x] = 1.0f;

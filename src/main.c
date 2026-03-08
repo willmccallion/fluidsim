@@ -195,97 +195,166 @@ int main() {
       DrawParticles(&particles);
     }
 
-    // 3. Draw Obstacles (Red Glow)
-    Texture2D obsTex = {0};
-    obsTex.id = sim.texObstacles.id;
-    obsTex.width = RES_X;
-    obsTex.height = RES_Y;
-    obsTex.format = PIXELFORMAT_UNCOMPRESSED_R32;
-    obsTex.mipmaps = 1;
-    BeginBlendMode(BLEND_ADDITIVE);
-    DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
-                   (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f, RED);
-    EndBlendMode();
+    // 3. Draw Car (sleek dark silhouette with subtle edge highlight)
+    {
+      Texture2D obsTex = {0};
+      obsTex.id = sim.texObstacles.id;
+      obsTex.width = RES_X;
+      obsTex.height = RES_Y;
+      obsTex.format = PIXELFORMAT_UNCOMPRESSED_R32;
+      obsTex.mipmaps = 1;
+      // Dark body fill
+      BeginBlendMode(BLEND_ALPHA);
+      DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
+                     (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f,
+                     (Color){15, 15, 20, 230});
+      EndBlendMode();
+      // Additive edge glow (faint blue-white)
+      BeginBlendMode(BLEND_ADDITIVE);
+      DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
+                     (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f,
+                     (Color){60, 90, 140, 80});
+      EndBlendMode();
+    }
 
     // 4. UI & HUD
     if (showHUD) {
       int sw = GetScreenWidth();
       int sh = GetScreenHeight();
 
-      // --- Top-left info panel ---
-      int panelX = 12, panelY = 12, panelW = 310, panelH = 110;
-      DrawRectangleRounded((Rectangle){panelX, panelY, panelW, panelH}, 0.12f, 8, (Color){0, 0, 0, 160});
-      DrawRectangleRoundedLines((Rectangle){panelX, panelY, panelW, panelH}, 0.12f, 8, (Color){255, 255, 255, 30});
+      // --- Colour palette ---
+      Color cPanel   = (Color){ 8,  10,  16, 200};
+      Color cBorder  = (Color){255, 255, 255,  18};
+      Color cLabel   = (Color){120, 130, 150, 255};
+      Color cWhite   = (Color){230, 235, 245, 255};
+      Color cAccent  = (Color){ 30, 160, 255, 255};   // blue accent
+      Color cDrag    = (Color){255,  80,  60, 255};   // orange-red
+      Color cLiftPos = (Color){ 30, 200, 100, 255};   // downforce (good)
+      Color cLiftNeg = (Color){255, 200,  40, 255};   // lift (bad)
+      Color cBar     = (Color){ 20,  24,  34, 255};
+      Color cBarFill = (Color){ 30, 160, 255, 180};
 
-      // FPS
-      DrawText(TextFormat("%d fps", GetFPS()), panelX + 12, panelY + 10, 14, (Color){160, 255, 160, 255});
+      // Helper macro: semi-transparent rounded panel
+      float rad = 0.08f;
 
-      // View mode
-      const char *modeName = "RGB Density";
-      Color modeColor = RAYWHITE;
-      if (viewMode == 1) { modeName = "Pressure Field"; modeColor = (Color){100, 180, 255, 255}; }
-      if (viewMode == 2) { modeName = "Velocity Field"; modeColor = (Color){255, 200, 80, 255}; }
-      if (viewMode == 3) { modeName = "Vorticity"; modeColor = (Color){255, 100, 180, 255}; }
-      DrawText(TextFormat("VIEW  %s", modeName), panelX + 12, panelY + 30, 16, modeColor);
+      // ================================================================
+      // TOP-LEFT: Sim info panel
+      // ================================================================
+      int pX = 14, pY = 14, pW = 280, pH = 102;
+      DrawRectangleRounded((Rectangle){pX, pY, pW, pH}, rad, 8, cPanel);
+      DrawRectangleRoundedLines((Rectangle){pX, pY, pW, pH}, rad, 8, cBorder);
 
-      // Brush size bar
-      DrawText("BRUSH", panelX + 12, panelY + 54, 11, (Color){150, 150, 150, 255});
+      // Title bar accent line
+      DrawRectangle(pX + 1, pY + 1, pW - 2, 2, cAccent);
+
+      // FPS  (top-right of panel)
+      DrawText(TextFormat("%d fps", GetFPS()), pX + pW - 55, pY + 8, 11, (Color){60, 200, 100, 255});
+
+      // View mode chip
+      const char *modeName = "SMOKE";
+      Color modeChipColor = (Color){50, 50, 60, 255};
+      Color modeTextColor = cWhite;
+      if (viewMode == 1) { modeName = "PRESSURE";  modeChipColor = (Color){20, 50, 90, 255};  modeTextColor = cAccent; }
+      if (viewMode == 2) { modeName = "VELOCITY";  modeChipColor = (Color){70, 50, 10, 255};  modeTextColor = (Color){255, 200, 60, 255}; }
+      if (viewMode == 3) { modeName = "VORTICITY"; modeChipColor = (Color){60, 10, 60, 255};  modeTextColor = (Color){200, 80, 255, 255}; }
+      DrawRectangleRounded((Rectangle){pX + 10, pY + 10, 90, 18}, 0.5f, 4, modeChipColor);
+      DrawText(modeName, pX + 14, pY + 13, 11, modeTextColor);
+
+      // Divider
+      DrawLine(pX + 10, pY + 34, pX + pW - 10, pY + 34, (Color){255,255,255,14});
+
+      // BRUSH row
       float bNorm = (brushRadius - 10.0f) / 290.0f;
-      DrawRectangle(panelX + 60, panelY + 54, 220, 10, (Color){40, 40, 40, 255});
-      DrawRectangle(panelX + 60, panelY + 54, (int)(bNorm * 220), 10, (Color){120, 200, 255, 200});
-      DrawText(TextFormat("%.0f", brushRadius), panelX + 285, panelY + 52, 11, (Color){180, 180, 180, 255});
+      DrawText("BRUSH", pX + 10, pY + 42, 10, cLabel);
+      DrawRectangleRounded((Rectangle){pX + 56, pY + 42, 190, 8}, 0.5f, 4, cBar);
+      DrawRectangleRounded((Rectangle){pX + 56, pY + 42, (int)(bNorm * 190), 8}, 0.5f, 4, (Color){100,160,255,200});
+      DrawText(TextFormat("%3.0f", brushRadius), pX + 252, pY + 40, 10, cLabel);
 
-      // Wind speed bar (only meaningful in wind tunnel mode)
-      const char *windLabel = sim.enableWindTunnel ? "WIND " : "WIND ";
-      Color windBarColor = sim.enableWindTunnel ? (Color){255, 160, 60, 200} : (Color){80, 80, 80, 150};
-      DrawText(windLabel, panelX + 12, panelY + 72, 11, sim.enableWindTunnel ? (Color){255, 160, 60, 255} : (Color){100, 100, 100, 255});
+      // WIND row
       float wNorm = (sim.windSpeed - 50.0f) / 3950.0f;
-      DrawRectangle(panelX + 60, panelY + 72, 220, 10, (Color){40, 40, 40, 255});
-      DrawRectangle(panelX + 60, panelY + 72, (int)(wNorm * 220), 10, windBarColor);
-      DrawText(TextFormat("%.0f", sim.windSpeed), panelX + 285, panelY + 70, 11, (Color){180, 180, 180, 255});
+      Color windColor = sim.enableWindTunnel ? (Color){255, 160, 50, 255} : cLabel;
+      Color windFill  = sim.enableWindTunnel ? (Color){255, 140, 30, 180} : (Color){60,60,60,150};
+      DrawText("WIND ", pX + 10, pY + 60, 10, windColor);
+      DrawRectangleRounded((Rectangle){pX + 56, pY + 60, 190, 8}, 0.5f, 4, cBar);
+      DrawRectangleRounded((Rectangle){pX + 56, pY + 60, (int)(wNorm * 190), 8}, 0.5f, 4, windFill);
+      DrawText(TextFormat("%4.0f", sim.windSpeed), pX + 248, pY + 58, 10, cLabel);
 
-      // Keybind hint strip
-      DrawText("V view  Scroll brush  F/G wind  W tunnel  Space ptcl  RMB wall  MMB erase  H hide", panelX + 12, panelY + 90, 9, (Color){120, 120, 120, 200});
+      // Keybinds hint (very subtle)
+      DrawText("[V] view  [F/G] wind  [Space] particles  [H] hide  [2] reset", pX + 10, pY + 84, 8, (Color){80, 85, 100, 200});
 
-      // --- Wind Tunnel Telemetry (bottom-left) ---
+      // ================================================================
+      // BOTTOM-LEFT: Aerodynamics telemetry panel (wind tunnel only)
+      // ================================================================
       if (sim.enableWindTunnel) {
-        int telX = 12, telY = sh - 160, telW = 320, telH = 148;
-        DrawRectangleRounded((Rectangle){telX, telY, telW, telH}, 0.10f, 8, (Color){0, 0, 0, 160});
-        DrawRectangleRoundedLines((Rectangle){telX, telW, telW, telH}, 0.10f, 8, (Color){255, 255, 255, 25});
+        int tX = 14, tH = 178, tW = 310, tY = sh - tH - 14;
+        DrawRectangleRounded((Rectangle){tX, tY, tW, tH}, rad, 8, cPanel);
+        DrawRectangleRoundedLines((Rectangle){tX, tY, tW, tH}, rad, 8, cBorder);
 
-        // Drag & Lift values
-        DrawText("AERODYNAMICS", telX + 12, telY + 10, 11, (Color){150, 150, 150, 255});
-        DrawText(TextFormat("Drag  %.3f", smoothedDrag), telX + 12, telY + 28, 18, (Color){255, 100, 80, 255});
-        Color liftColor = forces.y < 0 ? (Color){80, 180, 255, 255} : (Color){255, 200, 60, 255};
-        DrawText(TextFormat("Lift  %.3f", forces.y), telX + 12, telY + 50, 18, liftColor);
+        // Top accent
+        DrawRectangle(tX + 1, tY + 1, tW - 2, 2, cDrag);
 
-        // Graph
-        int graphX = telX + 12, graphY = telY + 140, graphH = 70, graphW = 296;
-        DrawRectangle(graphX, graphY - graphH, graphW, graphH, (Color){10, 10, 20, 200});
+        // Section label
+        DrawText("AERODYNAMICS", tX + 12, tY + 10, 9, cLabel);
+
+        // Drag readout
+        DrawText("DRAG", tX + 12, tY + 28, 10, cLabel);
+        DrawText(TextFormat("%.2f", smoothedDrag), tX + 52, tY + 24, 20, cDrag);
+
+        // Lift readout
+        bool isDownforce = forces.y < 0;
+        Color liftCol = isDownforce ? cLiftPos : cLiftNeg;
+        DrawText(isDownforce ? "DWF " : "LIFT", tX + 166, tY + 28, 10, cLabel);
+        DrawText(TextFormat("%.2f", fabsf(forces.y)), tX + 206, tY + 24, 20, liftCol);
+
+        // Divider
+        DrawLine(tX + 10, tY + 52, tX + tW - 10, tY + 52, (Color){255,255,255,14});
+
+        // Drag/Lift ratio
+        float dl = (fabsf(forces.y) > 0.001f) ? (smoothedDrag / fabsf(forces.y)) : 0.0f;
+        DrawText("L/D", tX + 12, tY + 60, 9, cLabel);
+        DrawText(TextFormat("%.3f", dl), tX + 42, tY + 57, 14, cWhite);
+
+        // Graph area
+        int gX = tX + 10, gY = tY + tH - 12, gW = tW - 20, gH = 72;
+        DrawRectangleRounded((Rectangle){gX, gY - gH, gW, gH}, 0.05f, 4, (Color){4, 6, 12, 220});
+        DrawText("DRAG HISTORY", gX + 4, gY - gH + 4, 8, (Color){70, 80, 100, 200});
+
+        // Horizontal center grid line
+        DrawLine(gX, gY - gH/2, gX + gW, gY - gH/2, (Color){255,255,255, 8});
 
         float minVal = dragHistory[0], maxVal = dragHistory[0];
         for (int i = 0; i < GRAPH_WIDTH; i++) {
           if (dragHistory[i] < minVal) minVal = dragHistory[i];
           if (dragHistory[i] > maxVal) maxVal = dragHistory[i];
         }
-        if (maxVal - minVal < 50.0f) {
+        if (maxVal - minVal < 30.0f) {
           float center = (maxVal + minVal) * 0.5f;
-          maxVal = center + 25.0f;
-          minVal = center - 25.0f;
+          maxVal = center + 15.0f;
+          minVal = center - 15.0f;
         }
 
         for (int i = 0; i < GRAPH_WIDTH - 1; i++) {
-          int idx = (graphIdx + i) % GRAPH_WIDTH;
+          int idx     = (graphIdx + i)     % GRAPH_WIDTH;
           int nextIdx = (graphIdx + i + 1) % GRAPH_WIDTH;
-          float norm1 = (dragHistory[idx] - minVal) / (maxVal - minVal);
-          float norm2 = (dragHistory[nextIdx] - minVal) / (maxVal - minVal);
-          int x1 = graphX + (int)((float)i / GRAPH_WIDTH * graphW);
-          int x2 = graphX + (int)((float)(i + 1) / GRAPH_WIDTH * graphW);
-          int y1 = graphY - (int)(fmaxf(0, fminf(1, norm1)) * graphH);
-          int y2 = graphY - (int)(fmaxf(0, fminf(1, norm2)) * graphH);
-          DrawLine(x1, y1, x2, y2, (Color){255, 100, 80, 220});
+          float n1 = fmaxf(0, fminf(1, (dragHistory[idx]     - minVal) / (maxVal - minVal)));
+          float n2 = fmaxf(0, fminf(1, (dragHistory[nextIdx] - minVal) / (maxVal - minVal)));
+          int x1 = gX + (int)((float)i       / GRAPH_WIDTH * gW);
+          int x2 = gX + (int)((float)(i + 1) / GRAPH_WIDTH * gW);
+          int y1 = gY - (int)(n1 * gH);
+          int y2 = gY - (int)(n2 * gH);
+          // Fade older samples
+          unsigned char alpha = (unsigned char)(100 + 120 * ((float)i / GRAPH_WIDTH));
+          DrawLine(x1, y1, x2, y2, (Color){255, 80, 60, alpha});
         }
-        DrawText("drag history", graphX + 4, graphY - graphH + 4, 9, (Color){100, 100, 100, 200});
+      }
+
+      // ================================================================
+      // TOP-RIGHT: View mode legend pill
+      // ================================================================
+      {
+        const char *hint = "[V] Smoke · Pressure · Velocity · Vorticity";
+        int hintW = MeasureText(hint, 9);
+        DrawText(hint, sw - hintW - 14, 14, 9, (Color){80, 85, 100, 200});
       }
     }
     EndDrawing();
