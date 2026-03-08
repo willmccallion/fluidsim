@@ -18,7 +18,7 @@ output      = "build/Makefile"
 group       = "Build"
 description = "Compile the fluid sim"
 type        = "file"
-deps        = ["configure"]
+deps        = ["configure", "sync"]
 command     = ["cmake", "--build", "build", "--parallel"]
 inputs      = ["src/**/*.c", "include/**/*.h", "resources/shaders/**/*.glsl", "resources/shaders/**/*.fs"]
 output      = "build/fluid_sim"
@@ -36,12 +36,12 @@ command     = ["./fluid_sim"]
 
 # ── Development ───────────────────────────────────────────────────────────────
 
-[shaders]
+[sync]
 group       = "Development"
-description = "Sync shaders to build directory (no recompile needed)"
+description = "Sync all resources to build directory (no recompile needed)"
 type        = "task"
 shell       = true
-command     = ["cp -r resources build/"]
+command     = ["cp -r resources/shaders build/resources/ && cp resources/*.png build/resources/ 2>/dev/null; true"]
 
 [clean]
 group       = "Development"
