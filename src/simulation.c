@@ -117,11 +117,12 @@ void ResetSim(FluidSim *sim, int mode) {
     if (carImg.data != NULL) {
       ImageFormat(&carImg, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
 
-      // Target region in simulation space
-      int carW = (int)(RES_X * 0.62f);  // car spans 62% of grid width
-      int carH = (int)(RES_Y * 0.55f);  // car spans 55% of grid height
-      int carX = (int)(RES_X * 0.05f);  // left margin
-      int carY = (int)(RES_Y * 0.22f);  // vertical offset (bottom of car)
+      // Target region in simulation space — preserve the image's aspect ratio.
+      float aspect = (float)carImg.width / (float)carImg.height;
+      int carW = (int)(RES_X * 0.62f);        // car spans 62% of grid width
+      int carH = (int)(carW / aspect);         // height derived from aspect ratio
+      int carX = (int)(RES_X * 0.05f);        // left margin
+      int carY = (RES_Y - carH) / 2;          // vertically centered
 
       ImageResize(&carImg, carW, carH);
 
