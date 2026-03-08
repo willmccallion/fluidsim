@@ -79,11 +79,12 @@ int main() {
       sim.enableWindTunnel = true;
     }
 
-    // Wind Speed (F/G keys)
+    // Wind Speed (F/G keys) — internal range 571–4000 maps to 50–350 km/h
+    // Step of ~114 internal units = ~10 km/h
     if (IsKeyDown(KEY_F))
-      sim.windSpeed = fmaxf(50.0f, sim.windSpeed - 30.0f);
+      sim.windSpeed = fmaxf(571.0f, sim.windSpeed - 114.0f);
     if (IsKeyDown(KEY_G))
-      sim.windSpeed = fminf(4000.0f, sim.windSpeed + 30.0f);
+      sim.windSpeed = fminf(4000.0f, sim.windSpeed + 114.0f);
 
     // Brush Size (Scroll Wheel)
     float scroll = GetMouseWheelMove();
@@ -267,17 +268,18 @@ int main() {
       DrawRectangleRounded((Rectangle){pX + 56, pY + 42, (int)(bNorm * 190), 8}, 0.5f, 4, (Color){100,160,255,200});
       DrawText(TextFormat("%3.0f", brushRadius), pX + 252, pY + 40, 10, cLabel);
 
-      // WIND row
-      float wNorm = (sim.windSpeed - 50.0f) / 3950.0f;
+      // WIND row — display in km/h (internal / 4000 * 350)
+      float windKmh = sim.windSpeed * (350.0f / 4000.0f);
+      float wNorm = (sim.windSpeed - 571.0f) / (4000.0f - 571.0f);
       Color windColor = sim.enableWindTunnel ? (Color){255, 160, 50, 255} : cLabel;
       Color windFill  = sim.enableWindTunnel ? (Color){255, 140, 30, 180} : (Color){60,60,60,150};
       DrawText("WIND ", pX + 10, pY + 60, 10, windColor);
       DrawRectangleRounded((Rectangle){pX + 56, pY + 60, 190, 8}, 0.5f, 4, cBar);
       DrawRectangleRounded((Rectangle){pX + 56, pY + 60, (int)(wNorm * 190), 8}, 0.5f, 4, windFill);
-      DrawText(TextFormat("%4.0f", sim.windSpeed), pX + 248, pY + 58, 10, cLabel);
+      DrawText(TextFormat("%3.0f km/h", windKmh), pX + 232, pY + 58, 10, cLabel);
 
       // Keybinds hint (very subtle)
-      DrawText("[V] view  [F/G] wind  [Space] particles  [H] hide  [2] reset", pX + 10, pY + 84, 8, (Color){80, 85, 100, 200});
+      DrawText("[V] view  [F/G] wind ±10km/h  [Space] particles  [H] hide  [2] reset", pX + 10, pY + 84, 8, (Color){80, 85, 100, 200});
 
       // ================================================================
       // BOTTOM-LEFT: Aerodynamics telemetry panel (wind tunnel only)

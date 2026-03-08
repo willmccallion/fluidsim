@@ -8,7 +8,7 @@ void InitSim(FluidSim *sim) {
   sim->ping = 0;
   sim->enableWindTunnel = true;
   sim->buoyancyStrength = 8.0f;
-  sim->windSpeed = 1200.0f;
+  sim->windSpeed = 2857.0f;  // ~250 km/h default
 
   // Initialize Smooth Stats
   sim->maxPressureSmooth = 1.0f;
@@ -159,7 +159,7 @@ void ResetSim(FluidSim *sim, int mode) {
     float yRWingB   = oy + 74*S;  // bottom of main element
     float yRWing2T  = oy + 68*S;  // second flap top
     float yRWing2B  = oy + 60*S;  // second flap bottom
-    float yRWingEP  = oy + 18*S;  // endplate bottom (overlaps into car top)
+    float yRWingEP  = oy + 10*S;  // endplate bottom — dips well below yTop (oy+20) into body
 
     for (int y = 0; y < RES_Y; y++) {
       for (int x = 0; x < RES_X; x++) {
@@ -255,26 +255,24 @@ void ResetSim(FluidSim *sim, int mode) {
         if (fx >= xRWingLE + 3*S && fx < xRWingTE - 3*S)
           if (fy >= yRWing2B && fy <= yRWing2T) solid = true;
 
-        // --- REAR WING ENDPLATES (extend down into car body to ensure connection) ---
+        // --- REAR WING ENDPLATES (tall vertical plates, bottom embedded in car body) ---
         if (fx >= xRWingLE && fx < xRWingLE + 5*S)
-          if (fy >= yTop - 4*S && fy <= yRWingT) solid = true;
+          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
         if (fx >= xRWingTE - 5*S && fx < xRWingTE)
-          if (fy >= yTop - 4*S && fy <= yRWingT) solid = true;
+          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
 
-        // --- REAR WING PYLON (connects wing underside to car top) ---
+        // --- REAR WING PYLON (thin strut from car body up to wing underside) ---
         {
           float pylonX = (xRWingLE + xRWingTE) * 0.5f;
           if (fabsf(fx - pylonX) < 4*S)
-            if (fy >= yTop - 2*S && fy <= yRWing2B) solid = true;
+            if (fy >= yRWingEP && fy <= yRWing2B) solid = true;
         }
 
-        // --- WHEEL AXLE STUBS (connect wheels to car body) ---
-        // Front axle: horizontal bar from body floor down to wheel center
-        if (fabsf(fx - xFWheelC) < 10*S)
-          if (fy >= yWheelC && fy <= yBot) solid = true;
-        // Rear axle
-        if (fabsf(fx - xRWheelC) < 10*S)
-          if (fy >= yWheelC && fy <= yBot) solid = true;
+        // --- WHEEL AXLE STUBS (connect wheels to underfloor) ---
+        if (fabsf(fx - xFWheelC) < 8*S)
+          if (fy >= yWheelC && fy <= yBot + 2*S) solid = true;
+        if (fabsf(fx - xRWheelC) < 8*S)
+          if (fy >= yWheelC && fy <= yBot + 2*S) solid = true;
 
         if (solid)
           oData[y * RES_X + x] = 1.0f;
