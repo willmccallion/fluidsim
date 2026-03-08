@@ -13,30 +13,22 @@ void main() {
 
     // Only run on the Inlet (Left Edge)
     if (coords.x < 10) {
-        // 1. Force High Velocity
+        // 1. Force uniform velocity
         imageStore(texVel, coords, vec4(windSpeed, 0.0, 0.0, 0.0));
 
-        // 2. The Smoke "Rake" (Streamlines)
-        float numLines = 16.0;
-        float spacing = size.y / numLines;
-        
-        // Calculate distance to the center of the nearest line
-        float dist = abs(mod(coords.y, spacing) - (spacing * 0.5));
-        
-        // --- THICKER LINES ---
-        // Previous was smoothstep(2.5, 1.5, dist)
-        // Now we use 8.0 to 6.0, making the lines about 16 pixels wide total
-        // with a soft edge so they don't look pixelated.
-        float smoke = smoothstep(9.0, 6.0, dist);
+        // 2. Smoke rake — 20 evenly-spaced streamlines
+        float numLines = 20.0;
+        float spacing  = size.y / numLines;
+        float dist     = abs(mod(float(coords.y), spacing) - spacing * 0.5);
 
-        // Restrict vertical area
-        if (coords.y < size.y * 0.15 || coords.y > size.y * 0.85) {
+        // Thick crisp lines with soft edges
+        float smoke = smoothstep(7.0, 4.0, dist);
+
+        // Allow lines across 10-90% of height (wider coverage)
+        if (coords.y < int(size.y * 0.10) || coords.y > int(size.y * 0.90))
             smoke = 0.0;
-        }
 
-        // 3. Output Color
-        // Pure white smoke, modulated by the shape
-        vec3 smokeColor = vec3(0.95, 0.95, 0.95); 
-        imageStore(texDens, coords, vec4(smokeColor * smoke, 1.0));
+        // Store brightness in RGB, alpha encodes presence for discard test
+        imageStore(texDens, coords, vec4(smoke, smoke, smoke, smoke));
     }
 }

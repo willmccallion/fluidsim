@@ -68,8 +68,8 @@ void main() {
     
     result = clamp(result, minVal, maxVal);
 
-    // 8. Decay (Optional, helps stability)
-    result *= 0.999;
+    // 8. Decay (very gentle — keep smoke bright)
+    result *= 0.9995;
 
     imageStore(texDest, coords, result);
 }

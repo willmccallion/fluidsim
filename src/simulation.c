@@ -130,36 +130,36 @@ void ResetSim(FluidSim *sim, int mode) {
     float xDiffR    = ox + 395*S;
 
     // ---- Y landmarks (larger y = higher on screen) ----
-    float yBot      = oy - 22*S;   // underfloor (lower on screen)
-    float yTop      = oy + 22*S;   // top of chassis slab (higher on screen)
-    float yNoseB    = oy - 8*S;    // nose bottom
-    float yNoseT    = oy + 8*S;    // nose top
-    float yCockPeak = oy + 54*S;   // cockpit opening peak (above chassis)
-    float ySidepodT = oy + 32*S;   // sidepod top (taller than chassis top)
-    float ySidepodB = oy - 30*S;   // sidepod undercut
-    float yDiffExit = oy - 55*S;   // diffuser exit (kicks down = lower y)
+    float yBot      = oy - 20*S;   // underfloor
+    float yTop      = oy + 20*S;   // top of chassis slab
+    float yNoseB    = oy -  7*S;   // nose bottom (thin tip)
+    float yNoseT    = oy +  7*S;   // nose top
+    float yCockPeak = oy + 55*S;   // cockpit peak (rises above chassis)
+    float ySidepodT = oy + 30*S;   // sidepod top
+    float ySidepodB = oy - 28*S;   // sidepod undercut
+    float yDiffExit = oy - 52*S;   // diffuser exit
 
-    // ---- Wheels (below chassis = lower y) ----
-    float wR        = 26*S;
-    float xFWheelC  = ox + 55*S;
-    float xRWheelC  = ox + 325*S;
-    float yWheelC   = oy - 46*S;  // below car floor
+    // ---- Wheels (sit below chassis floor, tangent to it) ----
+    float wR        = 24*S;
+    float xFWheelC  = ox + 58*S;
+    float xRWheelC  = ox + 320*S;
+    float yWheelC   = oy - 20*S - wR;  // tangent to floor
 
-    // ---- Front wing (below/ahead of nose) ----
-    float xFWingLE  = ox - 55*S;
-    float xFWingTE  = ox + 30*S;
-    float yFWingT   = oy - 30*S;  // top of front wing
-    float yFWingB   = oy - 37*S;  // bottom surface (thin element)
-    float yFWingEP  = oy - 56*S;  // endplate bottom
+    // ---- Front wing (below nose, ahead of it) ----
+    float xFWingLE  = ox - 52*S;
+    float xFWingTE  = ox + 28*S;
+    float yFWingT   = oy - 28*S;  // top surface
+    float yFWingB   = oy - 35*S;  // bottom surface
+    float yFWingEP  = oy - 54*S;  // endplate bottom
 
-    // ---- Rear wing (high above car) ----
-    float xRWingLE  = ox + 358*S;
-    float xRWingTE  = ox + 392*S;
-    float yRWingT   = oy + 92*S;  // top of main element
-    float yRWingB   = oy + 76*S;  // bottom of main element
-    float yRWing2T  = oy + 70*S;  // second flap top
-    float yRWing2B  = oy + 62*S;  // second flap bottom
-    float yRWingEP  = oy + 22*S;  // endplate bottom (flush with car top)
+    // ---- Rear wing (high above car, connected via pylon to body) ----
+    float xRWingLE  = ox + 355*S;
+    float xRWingTE  = ox + 390*S;
+    float yRWingT   = oy + 90*S;  // top of main element
+    float yRWingB   = oy + 74*S;  // bottom of main element
+    float yRWing2T  = oy + 68*S;  // second flap top
+    float yRWing2B  = oy + 60*S;  // second flap bottom
+    float yRWingEP  = oy + 18*S;  // endplate bottom (overlaps into car top)
 
     for (int y = 0; y < RES_Y; y++) {
       for (int x = 0; x < RES_X; x++) {
@@ -255,18 +255,26 @@ void ResetSim(FluidSim *sim, int mode) {
         if (fx >= xRWingLE + 3*S && fx < xRWingTE - 3*S)
           if (fy >= yRWing2B && fy <= yRWing2T) solid = true;
 
-        // --- REAR WING ENDPLATES ---
+        // --- REAR WING ENDPLATES (extend down into car body to ensure connection) ---
         if (fx >= xRWingLE && fx < xRWingLE + 5*S)
-          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
+          if (fy >= yTop - 4*S && fy <= yRWingT) solid = true;
         if (fx >= xRWingTE - 5*S && fx < xRWingTE)
-          if (fy >= yRWingEP && fy <= yRWingT) solid = true;
+          if (fy >= yTop - 4*S && fy <= yRWingT) solid = true;
 
-        // --- REAR WING PYLON ---
+        // --- REAR WING PYLON (connects wing underside to car top) ---
         {
           float pylonX = (xRWingLE + xRWingTE) * 0.5f;
-          if (fabsf(fx - pylonX) < 3.5f*S)
-            if (fy >= yRWingEP && fy <= yRWing2B) solid = true;
+          if (fabsf(fx - pylonX) < 4*S)
+            if (fy >= yTop - 2*S && fy <= yRWing2B) solid = true;
         }
+
+        // --- WHEEL AXLE STUBS (connect wheels to car body) ---
+        // Front axle: horizontal bar from body floor down to wheel center
+        if (fabsf(fx - xFWheelC) < 10*S)
+          if (fy >= yWheelC && fy <= yBot) solid = true;
+        // Rear axle
+        if (fabsf(fx - xRWheelC) < 10*S)
+          if (fy >= yWheelC && fy <= yBot) solid = true;
 
         if (solid)
           oData[y * RES_X + x] = 1.0f;

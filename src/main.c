@@ -29,7 +29,8 @@ int main() {
   ParticleSys particles;
   InitParticles(&particles);
 
-  Shader shdDisplay = LoadShader(0, "resources/shaders/display.fs");
+  Shader shdDisplay  = LoadShader(0, "resources/shaders/display.fs");
+  Shader shdObstacle = LoadShader(0, "resources/shaders/obstacle.fs");
 
   // 3. State Variables
   // 0 = Standard (RGB), 1 = Pressure Tint, 2 = Velocity Tint, 3 = Curl
@@ -195,7 +196,11 @@ int main() {
       DrawParticles(&particles);
     }
 
-    // 3. Draw Car (sleek dark silhouette with subtle edge highlight)
+    // 3. Draw Car — obstacle tex is R16F (red channel only).
+    // Raylib tints by multiplying the color uniform with the texture sample.
+    // R16F maps to red channel, so: draw with RED tint gives red*mask.
+    // We use the obstacle shader which reads .r and outputs proper RGBA.
+    // Fallback: additive grey (R+G+B separately) if shader binding issues.
     {
       Texture2D obsTex = {0};
       obsTex.id = sim.texObstacles.id;
@@ -203,18 +208,10 @@ int main() {
       obsTex.height = RES_Y;
       obsTex.format = PIXELFORMAT_UNCOMPRESSED_R32;
       obsTex.mipmaps = 1;
-      // Dark body fill
-      BeginBlendMode(BLEND_ALPHA);
+      BeginShaderMode(shdObstacle);
       DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
-                     (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f,
-                     (Color){15, 15, 20, 230});
-      EndBlendMode();
-      // Additive edge glow (faint blue-white)
-      BeginBlendMode(BLEND_ADDITIVE);
-      DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
-                     (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f,
-                     (Color){60, 90, 140, 80});
-      EndBlendMode();
+                     (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f, WHITE);
+      EndShaderMode();
     }
 
     // 4. UI & HUD

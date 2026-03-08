@@ -5,8 +5,8 @@ in vec4 fragColor;
 
 out vec4 finalColor;
 
-uniform sampler2D texture0; // Smoke
-uniform sampler2D texture1; // Data
+uniform sampler2D texture0; // Smoke/density
+uniform sampler2D texture1; // Data (pressure / velocity / curl)
 uniform vec4 colDiffuse;
 uniform int mode;
 
@@ -16,52 +16,57 @@ uniform float maxCurl;
 
 vec3 getSpectrum(float t) {
     t = clamp(t, 0.0, 1.0);
-    vec3 col = vec3(0.0);
-    if (t < 0.25) col = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), t * 4.0);
-    else if (t < 0.5) col = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), (t - 0.25) * 4.0);
-    else if (t < 0.75) col = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), (t - 0.5) * 4.0);
-    else col = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.75) * 4.0);
-    return col;
+    if (t < 0.25) return mix(vec3(0.0, 0.0, 0.8), vec3(0.0, 0.8, 1.0), t * 4.0);
+    if (t < 0.5)  return mix(vec3(0.0, 0.8, 1.0), vec3(0.0, 0.9, 0.0), (t - 0.25) * 4.0);
+    if (t < 0.75) return mix(vec3(0.0, 0.9, 0.0), vec3(1.0, 0.9, 0.0), (t - 0.5)  * 4.0);
+                  return mix(vec3(1.0, 0.9, 0.0), vec3(1.0, 0.1, 0.0), (t - 0.75) * 4.0);
 }
 
-// Bipolar blue->black->red colormap for signed curl
 vec3 getCurlColor(float t) {
     t = clamp(t, -1.0, 1.0);
     if (t < 0.0) return mix(vec3(0.0), vec3(0.1, 0.4, 1.0), -t);
-    else          return mix(vec3(0.0), vec3(1.0, 0.2, 0.05), t);
+    else         return mix(vec3(0.0), vec3(1.0, 0.2, 0.05), t);
 }
 
 void main() {
     vec4 dense = texture(texture0, fragTexCoord);
 
+    // --- Mode 3: Vorticity (full-field, no smoke dependency) ---
     if (mode == 3) {
-        // Curl mode: show vorticity field directly, independent of dye
         float curl = texture(texture1, fragTexCoord).r;
         float norm = curl / max(maxCurl, 0.0001);
-        float mag = abs(norm);
-        vec3 col = getCurlColor(norm);
-        // Blend with dye for regions where fluid is visible
-        float dyeBrightness = length(dense.rgb);
-        col = mix(col * 0.4, col, smoothstep(0.0, 0.3, mag));
-        col += dense.rgb * 0.15; // subtle dye bleed-through
-        finalColor = vec4(col, max(mag * 1.5, dyeBrightness * 0.5 + 0.05));
+        float mag  = abs(norm);
+        vec3 col   = getCurlColor(norm);
+        col = mix(col * 0.3, col, smoothstep(0.0, 0.25, mag));
+        col += dense.rgb * 0.2;
+        finalColor = vec4(col * 1.5, max(mag * 2.0, length(dense.rgb) * 0.4 + 0.05));
         return;
     }
 
-    if (dense.a < 0.05) discard;
-
-    vec3 finalRGB = dense.rgb;
-
+    // --- Mode 1: Pressure ---
     if (mode == 1) {
-        float p = texture(texture1, fragTexCoord).r;
-        float norm = (p / maxPressure) * 0.5 + 0.5;
-        finalRGB = getSpectrum(norm) * length(dense.rgb) * 1.2;
-    }
-    else if (mode == 2) {
-        float speed = length(texture(texture1, fragTexCoord).xy);
-        float norm = speed / maxVelocity;
-        finalRGB = getSpectrum(norm) * length(dense.rgb) * 1.2;
+        float p    = texture(texture1, fragTexCoord).r;
+        float norm = (p / max(maxPressure, 0.0001)) * 0.5 + 0.5;
+        vec3  col  = getSpectrum(norm);
+        // Show full field — use smoke alpha as mask but render everywhere fluid exists
+        float smoke = clamp(length(dense.rgb) * 2.0, 0.0, 1.0);
+        finalColor = vec4(col, max(smoke, 0.06));
+        return;
     }
 
-    finalColor = vec4(finalRGB, dense.a);
+    // --- Mode 2: Velocity ---
+    if (mode == 2) {
+        float speed = length(texture(texture1, fragTexCoord).xy);
+        float norm  = clamp(speed / max(maxVelocity, 0.0001), 0.0, 1.0);
+        vec3  col   = getSpectrum(norm);
+        float smoke = clamp(length(dense.rgb) * 2.0, 0.0, 1.0);
+        finalColor = vec4(col, max(smoke, 0.06));
+        return;
+    }
+
+    // --- Mode 0: RGB Smoke ---
+    if (dense.a < 0.04) discard;
+    // Boost brightness so smoke is vivid
+    vec3 rgb = dense.rgb * 2.2;
+    finalColor = vec4(rgb, dense.a);
 }
