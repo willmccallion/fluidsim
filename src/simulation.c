@@ -145,21 +145,23 @@ void ResetSim(FluidSim *sim, int mode) {
     float xRWheelC  = ox + 320*S;
     float yWheelC   = oy - 20*S - wR;  // tangent to floor
 
-    // ---- Front wing (below nose, ahead of it) ----
-    float xFWingLE  = ox - 52*S;
-    float xFWingTE  = ox + 28*S;
-    float yFWingT   = oy - 28*S;  // top surface
-    float yFWingB   = oy - 35*S;  // bottom surface
-    float yFWingEP  = oy - 54*S;  // endplate bottom
+    // ---- Front wing ----
+    // Sits below the nose, connected via a vertical strut at the trailing edge
+    float xFWingLE  = ox - 50*S;  // leading edge (ahead of nose tip)
+    float xFWingTE  = ox + 25*S;  // trailing edge (under nose)
+    float yFWingT   = oy - 22*S;  // top surface — at car floor level so strut connects
+    float yFWingB   = oy - 30*S;  // bottom surface (thin element)
+    float yFWingEP  = oy - 50*S;  // endplate bottom
 
-    // ---- Rear wing (high above car, connected via pylon to body) ----
-    float xRWingLE  = ox + 355*S;
-    float xRWingTE  = ox + 390*S;
-    float yRWingT   = oy + 90*S;  // top of main element
-    float yRWingB   = oy + 74*S;  // bottom of main element
-    float yRWing2T  = oy + 68*S;  // second flap top
-    float yRWing2B  = oy + 60*S;  // second flap bottom
-    float yRWingEP  = oy + 10*S;  // endplate bottom — dips well below yTop (oy+20) into body
+    // ---- Rear wing ----
+    // Low-profile: sits just above the car body, connected by a wide pylon
+    float xRWingLE  = ox + 350*S;
+    float xRWingTE  = ox + 392*S;
+    float yRWingT   = oy + 65*S;  // top of main element
+    float yRWingB   = oy + 52*S;  // bottom of main element
+    float yRWing2T  = oy + 48*S;  // second flap top
+    float yRWing2B  = oy + 40*S;  // second flap bottom
+    float yRWingEP  = oy + 10*S;  // endplate bottom (embedded in car body)
 
     for (int y = 0; y < RES_Y; y++) {
       for (int x = 0; x < RES_X; x++) {
@@ -232,39 +234,47 @@ void ResetSim(FluidSim *sim, int mode) {
           if (dx*dx + dy*dy <= wR*wR) solid = true;
         }
 
-        // --- FRONT WING: main plane ---
+        // --- FRONT WING: main plane (slight camber, leading edge lower) ---
         if (fx >= xFWingLE && fx < xFWingTE) {
           float t = (fx - xFWingLE) / (xFWingTE - xFWingLE);
-          float camber = (1.0f - t) * 7*S; // leading edge tips down
+          float camber = (1.0f - t) * 6*S;
           float lo = yFWingB - camber;
           float hi = yFWingT - camber;
           if (fy >= lo && fy <= hi) solid = true;
         }
 
-        // --- FRONT WING ENDPLATES ---
+        // --- FRONT WING: vertical strut connecting wing to nose underside ---
+        // At the trailing edge, a strut rises from wing top up to the nose floor
+        if (fx >= xFWingTE - 4*S && fx < xFWingTE + 4*S) {
+          // nose floor at this x: interpolate nose bottom
+          float t  = (xFWingTE - xNoseTip) / (xNoseRoot - xNoseTip);
+          float ts = t * t * (3.0f - 2.0f * t);
+          float noseFloor = yNoseB + ts * (yBot - yNoseB);
+          if (fy >= yFWingT && fy <= noseFloor) solid = true;
+        }
+
+        // --- FRONT WING ENDPLATES (vertical, at leading edge only) ---
         if (fx >= xFWingLE && fx < xFWingLE + 5*S)
-          if (fy >= yFWingEP && fy <= yFWingT) solid = true;
-        if (fx >= xFWingTE - 4*S && fx < xFWingTE + 2*S)
           if (fy >= yFWingEP && fy <= yFWingT) solid = true;
 
         // --- REAR WING: main element ---
         if (fx >= xRWingLE && fx < xRWingTE)
           if (fy >= yRWingB && fy <= yRWingT) solid = true;
 
-        // --- REAR WING: DRS flap ---
-        if (fx >= xRWingLE + 3*S && fx < xRWingTE - 3*S)
+        // --- REAR WING: second flap element ---
+        if (fx >= xRWingLE + 4*S && fx < xRWingTE - 4*S)
           if (fy >= yRWing2B && fy <= yRWing2T) solid = true;
 
-        // --- REAR WING ENDPLATES (tall vertical plates, bottom embedded in car body) ---
-        if (fx >= xRWingLE && fx < xRWingLE + 5*S)
+        // --- REAR WING ENDPLATES (wide enough to look substantial) ---
+        if (fx >= xRWingLE && fx < xRWingLE + 8*S)
           if (fy >= yRWingEP && fy <= yRWingT) solid = true;
-        if (fx >= xRWingTE - 5*S && fx < xRWingTE)
+        if (fx >= xRWingTE - 8*S && fx < xRWingTE)
           if (fy >= yRWingEP && fy <= yRWingT) solid = true;
 
-        // --- REAR WING PYLON (thin strut from car body up to wing underside) ---
+        // --- REAR WING PYLON (wide strut connecting body to wing underside) ---
         {
           float pylonX = (xRWingLE + xRWingTE) * 0.5f;
-          if (fabsf(fx - pylonX) < 4*S)
+          if (fabsf(fx - pylonX) < 8*S)
             if (fy >= yRWingEP && fy <= yRWing2B) solid = true;
         }
 
