@@ -1,15 +1,12 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
+#include "obstacle_shape.h"
 #include "pressure.h"
 #include "utils.h"
 
 #define DEFAULT_SIM_WIDTH 2560
 #define DEFAULT_SIM_HEIGHT 1280
-
-#define CIRCLE_SCENE_CENTER_X_FRACTION 0.5f
-#define CIRCLE_SCENE_CENTER_Y_FRACTION 0.5f
-#define CIRCLE_SCENE_RADIUS_FRACTION 0.1f
 
 typedef struct {
   int width;
@@ -56,6 +53,8 @@ typedef enum {
 
 void InitSim(FluidSim *sim, int width, int height);
 void ResetSim(FluidSim *sim, SimScene scene);
+/** Replaces all obstacles with `shape`; on failure they are left as is. */
+bool PlaceObstacle(FluidSim *sim, const ObstacleShape *shape);
 void UpdateSim(FluidSim *sim, float dt, float time);
 /**
  * Advances by dt: smoke is advected once, velocity in `velocitySubsteps`

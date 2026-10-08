@@ -133,19 +133,92 @@ static void RasterizeCircle(float *oData, int width, int height,
   }
 }
 
-static void UploadSceneObstacles(FluidSim *sim, SimScene scene) {
-  float *oData = (float *)calloc((size_t)sim->width * sim->height, sizeof(float));
-  if (scene == SCENE_CAR_WIND_TUNNEL)
-    RasterizeCarMask(oData, sim->width, sim->height);
-  else
-    RasterizeCircle(oData, sim->width, sim->height,
-                    (Vector2){sim->width * CIRCLE_SCENE_CENTER_X_FRACTION,
-                              sim->height * CIRCLE_SCENE_CENTER_Y_FRACTION},
-                    sim->height * CIRCLE_SCENE_RADIUS_FRACTION);
+static bool IsSolidMaskPixel(Color c) {
+  int luminance = (c.r + c.g + c.b) / 3;
+  return c.a >= 128 && luminance < 128;
+}
+
+/** Nearest-neighbour scales the mask into `shape`'s box; row 0 is its top. */
+static void RasterizeMask(float *oData, int width, int height,
+                          const Color *pixels, int maskWidth, int maskHeight,
+                          ObstacleShape shape) {
+  float boxHeight = shape.size * (float)height;
+  float boxWidth = boxHeight * (float)maskWidth / (float)maskHeight;
+  float left = shape.centerX * (float)width - boxWidth * 0.5f;
+  float bottom = shape.centerY * (float)height - boxHeight * 0.5f;
+
+  int x0 = (int)fmaxf(floorf(left), 0.0f);
+  int x1 = (int)fminf(ceilf(left + boxWidth), (float)width);
+  int y0 = (int)fmaxf(floorf(bottom), 0.0f);
+  int y1 = (int)fminf(ceilf(bottom + boxHeight), (float)height);
+  for (int y = y0; y < y1; y++) {
+    float v = ((float)y + 0.5f - bottom) / boxHeight;
+    if (v < 0.0f || v >= 1.0f)
+      continue;
+    int maskRow = maskHeight - 1 - (int)(v * (float)maskHeight);
+    for (int x = x0; x < x1; x++) {
+      float u = ((float)x + 0.5f - left) / boxWidth;
+      if (u < 0.0f || u >= 1.0f)
+        continue;
+      int maskCol = (int)(u * (float)maskWidth);
+      if (IsSolidMaskPixel(pixels[maskRow * maskWidth + maskCol]))
+        oData[(size_t)y * width + x] = 1.0f;
+    }
+  }
+}
+
+static bool RasterizeMaskFile(float *oData, int width, int height,
+                              ObstacleShape shape) {
+  Image image = LoadImage(shape.maskPath);
+  if (image.data == NULL) {
+    TraceLog(LOG_ERROR, "Could not load obstacle mask %s", shape.maskPath);
+    return false;
+  }
+  Color *pixels = LoadImageColors(image);
+  RasterizeMask(oData, width, height, pixels, image.width, image.height,
+                shape);
+  UnloadImageColors(pixels);
+  UnloadImage(image);
+  return true;
+}
+
+static void UploadObstacles(FluidSim *sim, const float *oData) {
   glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RED, GL_FLOAT,
-                  oData);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RED,
+                  GL_FLOAT, oData);
+}
+
+static void UploadCarObstacle(FluidSim *sim) {
+  float *oData =
+      (float *)calloc((size_t)sim->width * sim->height, sizeof(float));
+  if (oData == NULL) {
+    TraceLog(LOG_WARNING, "Could not allocate the car obstacle");
+    return;
+  }
+  RasterizeCarMask(oData, sim->width, sim->height);
+  UploadObstacles(sim, oData);
   free(oData);
+}
+
+static bool UploadShapeObstacle(FluidSim *sim, const ObstacleShape *shape) {
+  float *oData =
+      (float *)calloc((size_t)sim->width * sim->height, sizeof(float));
+  if (oData == NULL)
+    return false;
+
+  bool ok = true;
+  if (shape->maskPath == NULL)
+    RasterizeCircle(oData, sim->width, sim->height,
+                    (Vector2){shape->centerX * (float)sim->width,
+                              shape->centerY * (float)sim->height},
+                    shape->size * 0.5f * (float)sim->height);
+  else
+    ok = RasterizeMaskFile(oData, sim->width, sim->height, *shape);
+
+  if (ok)
+    UploadObstacles(sim, oData);
+  free(oData);
+  return ok;
 }
 
 void ResetSim(FluidSim *sim, SimScene scene) {
@@ -181,9 +254,21 @@ void ResetSim(FluidSim *sim, SimScene scene) {
   free(zeroData);
 
   sim->buoyancyStrength = scene == SCENE_FREE ? 8.0f : 0.0f;
-  if (scene != SCENE_FREE)
-    UploadSceneObstacles(sim, scene);
+  if (scene == SCENE_CAR_WIND_TUNNEL)
+    UploadCarObstacle(sim);
+  if (scene == SCENE_CIRCLE_WIND_TUNNEL) {
+    ObstacleShape circle = DefaultObstacleShape();
+    if (!UploadShapeObstacle(sim, &circle))
+      TraceLog(LOG_WARNING, "Could not place the circle obstacle");
+  }
   RebuildPressureMasks(&sim->pressure);
+}
+
+bool PlaceObstacle(FluidSim *sim, const ObstacleShape *shape) {
+  if (!UploadShapeObstacle(sim, shape))
+    return false;
+  RebuildPressureMasks(&sim->pressure);
+  return true;
 }
 
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,

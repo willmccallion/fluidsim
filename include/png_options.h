@@ -1,6 +1,7 @@
 #ifndef PNG_OPTIONS_H
 #define PNG_OPTIONS_H
 
+#include "obstacle_shape.h"
 #include "palette.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -17,6 +18,7 @@ typedef struct {
   /** NULL renders every palette. */
   const Palette *palette;
   FrameKind frame;
+  ObstacleShape shape;
   int smokeLineCount;
   /** Line width in default-grid cells; multiplied by `scale`. */
   float smokeLineWidth;

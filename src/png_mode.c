@@ -9,7 +9,7 @@
 
 #define STEP_SECONDS 0.005f
 #define KMH_PER_SPEED_UNIT (350.0f / 4000.0f)
-#define SQUARE_FRAME_CIRCLE_FRACTION 0.22f
+#define SQUARE_FRAME_SHAPE_FRACTION 0.22f
 #define SEARCH_INTERVAL_STEPS 20
 
 /** Tracks the most turbulent frame seen while the simulation runs. */
@@ -22,14 +22,14 @@ typedef struct {
   double bestScore;
 } FrameSearch;
 
-/** Square frames put the circle near the left so the wake fills the rest. */
-static CellRect FrameRect(FrameKind frame, int width, int height) {
-  if (frame == FRAME_WIDE)
+/** Square frames put the shape near the left so the wake fills the rest. */
+static CellRect FrameRect(const PngOptions *o, int width, int height) {
+  if (o->frame == FRAME_WIDE)
     return (CellRect){0, 0, width, height};
 
   int size = height;
-  float circleX = (float)width * CIRCLE_SCENE_CENTER_X_FRACTION;
-  int x = (int)lroundf(circleX - SQUARE_FRAME_CIRCLE_FRACTION * (float)size);
+  float shapeX = (float)width * o->shape.centerX;
+  int x = (int)lroundf(shapeX - SQUARE_FRAME_SHAPE_FRACTION * (float)size);
   if (x < 0)
     x = 0;
   if (x > width - size)
@@ -133,13 +133,16 @@ static bool Simulate(FluidSim *sim, const PngOptions *o, FrameSearch *search) {
 static bool ExportPalette(const StreaklineFields *fields,
                           const Palette *palette, const PngOptions *o) {
   char path[1024];
-  int length = snprintf(path, sizeof(path), "%s/sphere-%s.png", o->outputDir,
-                        palette->name);
+  const char *stem = o->shape.maskPath == NULL
+                         ? "sphere"
+                         : GetFileNameWithoutExt(o->shape.maskPath);
+  int length = snprintf(path, sizeof(path), "%s/%s-%s.png", o->outputDir,
+                        stem, palette->name);
   if (length < 0 || (size_t)length >= sizeof(path)) {
     TraceLog(LOG_ERROR, "PNG: Output path too long for %s", palette->name);
     return false;
   }
-  CellRect crop = FrameRect(o->frame, fields->width, fields->height);
+  CellRect crop = FrameRect(o, fields->width, fields->height);
   if (!ExportStreaklineImage(fields, palette, crop, o->supersample, path)) {
     TraceLog(LOG_ERROR, "PNG: Failed to write %s", path);
     return false;
@@ -174,10 +177,14 @@ int RunPngMode(const PngOptions *options) {
   InitSim(&sim, DEFAULT_SIM_WIDTH * options->scale,
           DEFAULT_SIM_HEIGHT * options->scale);
   ResetSim(&sim, SCENE_CIRCLE_WIND_TUNNEL);
+  if (!PlaceObstacle(&sim, &options->shape)) {
+    CloseHeadlessContext(&ctx);
+    return 1;
+  }
   ApplyOptions(&sim, options);
 
   FrameSearch search;
-  CellRect crop = FrameRect(options->frame, sim.width, sim.height);
+  CellRect crop = FrameRect(options, sim.width, sim.height);
   if (!StartFrameSearch(&sim, crop, &search)) {
     CloseHeadlessContext(&ctx);
     return 1;

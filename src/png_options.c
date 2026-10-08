@@ -9,6 +9,7 @@ PngOptions DefaultPngOptions(void) {
                       .scale = 1,
                       .palette = NULL,
                       .frame = FRAME_SQUARE,
+                      .shape = DefaultObstacleShape(),
                       .smokeLineCount = 60,
                       .smokeLineWidth = 5.0f,
                       .windKmh = 250.0f,
@@ -66,6 +67,19 @@ static bool ParsePalette(const char *text, const Palette **out) {
   return true;
 }
 
+static bool ParseShape(const char *v, PngOptions *o) {
+  o->shape.maskPath = strcmp(v, "circle") == 0 ? NULL : v;
+  return v[0] != '\0';
+}
+static bool ParseShapeX(const char *v, PngOptions *o) {
+  return ParseFloatInRange(v, 0.0f, 1.0f, &o->shape.centerX);
+}
+static bool ParseShapeY(const char *v, PngOptions *o) {
+  return ParseFloatInRange(v, 0.0f, 1.0f, &o->shape.centerY);
+}
+static bool ParseShapeSize(const char *v, PngOptions *o) {
+  return ParseFloatInRange(v, 0.02f, 0.9f, &o->shape.size);
+}
 static bool ParseSteps(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 1, 1000000, &o->steps);
 }
@@ -115,7 +129,9 @@ typedef struct {
 static const OptionSpec OPTION_SPECS[] = {
     {"--steps", ParseSteps},         {"--scale", ParseScale},
     {"--palette", ParsePaletteOption},
-    {"--frame", ParseFrameOption},   {"--lines", ParseLines},
+    {"--frame", ParseFrameOption},   {"--shape", ParseShape},
+    {"--shape-x", ParseShapeX},      {"--shape-y", ParseShapeY},
+    {"--shape-size", ParseShapeSize}, {"--lines", ParseLines},
     {"--line-width", ParseLineWidth}, {"--wind-kmh", ParseWind},
     {"--vorticity", ParseVorticity}, {"--substeps", ParseSubsteps},
     {"--vcycles", ParseVCycles},     {"--search-steps", ParseSearchSteps},
@@ -162,13 +178,19 @@ void PrintPngUsage(FILE *stream, const char *program) {
   fprintf(stream,
           "usage: %s --png [options]\n"
           "\n"
-          "Simulates flow past a circle without a window and writes\n"
-          "<out>/sphere-<palette>.png for each requested palette.\n"
+          "Simulates flow past an obstacle without a window and writes\n"
+          "<out>/<shape>-<palette>.png for each requested palette\n"
+          "(<shape> is 'sphere' for the circle, else the mask file name).\n"
           "\n"
           "  --steps N         simulation steps of 0.005 s (default %d)\n"
           "  --scale N         grid resolution multiplier 1-4 (default %d)\n"
           "  --palette NAME    palette name or 'all' (default all)\n"
           "  --frame KIND      square or wide (default square)\n"
+          "  --shape S         'circle' or a silhouette PNG; dark opaque\n"
+          "                    pixels are solid (default circle)\n"
+          "  --shape-x F       shape centre, fraction of width (default %.2f)\n"
+          "  --shape-y F       shape centre, fraction of height (default %.2f)\n"
+          "  --shape-size F    shape height, fraction of height (default %.2f)\n"
           "  --lines N         inlet smoke lines (default %d)\n"
           "  --line-width PX   smoke line width at scale 1 (default %.1f)\n"
           "  --wind-kmh N      inlet wind speed (default %.0f)\n"
@@ -181,7 +203,8 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "  --out DIR         output directory (default %s)\n"
           "\n"
           "palettes:",
-          program, d.steps, d.scale, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
+          program, d.steps, d.scale, d.shape.centerX, d.shape.centerY,
+          d.shape.size, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
           d.vorticityStrength, d.velocitySubsteps, d.pressureVCycles,
           d.searchSteps, d.supersample, d.outputDir);
   for (int i = 0; i < PaletteCount(); i++)
