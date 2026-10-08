@@ -20,6 +20,11 @@ Texture2D_GL CreateTexture2D(int w, int h, int format) {
   return tex;
 }
 
+void ReadTextureFloats(Texture2D_GL tex, GLenum format, float *out) {
+  glBindTexture(GL_TEXTURE_2D, tex.id);
+  glGetTexImage(GL_TEXTURE_2D, 0, format, GL_FLOAT, out);
+}
+
 unsigned int LoadCompute(const char *code) {
   unsigned int shader = rlCompileShader(code, RL_COMPUTE_SHADER);
   unsigned int program = rlLoadComputeShaderProgram(shader);

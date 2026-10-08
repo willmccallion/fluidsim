@@ -16,6 +16,8 @@ typedef struct {
 } Texture2D_GL;
 
 Texture2D_GL CreateTexture2D(int w, int h, int format);
+/** Copies mip level 0 into `out` as floats; `format` picks the channels. */
+void ReadTextureFloats(Texture2D_GL tex, GLenum format, float *out);
 unsigned int LoadCompute(const char *code);
 
 #endif

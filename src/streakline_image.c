@@ -73,11 +73,6 @@ static bool CropFitsFields(const StreaklineFields *f, CellRect crop) {
          crop.x + crop.width <= f->width && crop.y + crop.height <= f->height;
 }
 
-static void ReadTexture(Texture2D_GL tex, GLenum format, float *out) {
-  glBindTexture(GL_TEXTURE_2D, tex.id);
-  glGetTexImage(GL_TEXTURE_2D, 0, format, GL_FLOAT, out);
-}
-
 bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out) {
   size_t cellCount = (size_t)sim->width * sim->height;
   StreaklineFields f = {.velocityRG = malloc(cellCount * 2 * sizeof(float)),
@@ -91,9 +86,9 @@ bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out) {
   }
 
   glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT);
-  ReadTexture(sim->texVelocity[sim->velocityPing], GL_RG, f.velocityRG);
-  ReadTexture(sim->texDensity[sim->densityPing], GL_RGB, f.smokeRGB);
-  ReadTexture(sim->texObstacles, GL_RED, f.obstacles);
+  ReadTextureFloats(sim->texVelocity[sim->velocityPing], GL_RG, f.velocityRG);
+  ReadTextureFloats(sim->texDensity[sim->densityPing], GL_RGB, f.smokeRGB);
+  ReadTextureFloats(sim->texObstacles, GL_RED, f.obstacles);
   *out = f;
   return true;
 }
