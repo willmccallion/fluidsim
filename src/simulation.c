@@ -24,6 +24,8 @@ void InitSim(FluidSim *sim, int width, int height) {
   sim->vorticityStrength = 5.0f;
   sim->smokeLineCount = 20;
   sim->smokeLineHalfWidth = 4.0f;
+  sim->inletTurbulence = 0.0f;
+  sim->inletSeed = 0.0f;
 
   // Initialize Smooth Stats
   sim->maxPressureSmooth = 1.0f;
@@ -407,6 +409,10 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                  &sim->smokeLineCount, RL_SHADER_UNIFORM_INT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "lineHalfWidth"),
                  &sim->smokeLineHalfWidth, RL_SHADER_UNIFORM_FLOAT, 1);
+    rlSetUniform(rlGetLocationUniform(sim->shdInlet, "turbulence"),
+                 &sim->inletTurbulence, RL_SHADER_UNIFORM_FLOAT, 1);
+    rlSetUniform(rlGetLocationUniform(sim->shdInlet, "seed"), &sim->inletSeed,
+                 RL_SHADER_UNIFORM_FLOAT, 1);
     rlComputeShaderDispatch(2, GroupCount(sim->height), 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     rlDisableShader();

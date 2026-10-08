@@ -42,6 +42,8 @@ static void ApplyOptions(FluidSim *sim, const PngOptions *o) {
   sim->smokeLineHalfWidth = o->smokeLineWidth * 0.5f * (float)o->scale;
   sim->windSpeed = o->windKmh / KMH_PER_SPEED_UNIT * (float)o->scale;
   sim->vorticityStrength = o->vorticityStrength;
+  sim->inletTurbulence = o->turbulence;
+  sim->inletSeed = (float)o->seed;
   sim->pressureVCycles = o->pressureVCycles;
   sim->trackDisplayStats = false;
 }

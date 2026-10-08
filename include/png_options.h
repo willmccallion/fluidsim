@@ -24,6 +24,9 @@ typedef struct {
   float smokeLineWidth;
   float windKmh;
   float vorticityStrength;
+  /** Inlet gust strength as a fraction of the wind speed. */
+  float turbulence;
+  int seed;
   /** Substeps at scale 1; multiplied by `scale` to keep the CFL number. */
   int velocitySubsteps;
   int pressureVCycles;

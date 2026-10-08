@@ -14,6 +14,8 @@ PngOptions DefaultPngOptions(void) {
                       .smokeLineWidth = 5.0f,
                       .windKmh = 250.0f,
                       .vorticityStrength = 5.0f,
+                      .turbulence = 0.0f,
+                      .seed = 1,
                       .velocitySubsteps = 4,
                       .pressureVCycles = 2,
                       .searchSteps = 500,
@@ -104,6 +106,12 @@ static bool ParseWind(const char *v, PngOptions *o) {
 static bool ParseVorticity(const char *v, PngOptions *o) {
   return ParseFloatInRange(v, 0.0f, 100.0f, &o->vorticityStrength);
 }
+static bool ParseTurbulence(const char *v, PngOptions *o) {
+  return ParseFloatInRange(v, 0.0f, 0.5f, &o->turbulence);
+}
+static bool ParseSeed(const char *v, PngOptions *o) {
+  return ParseIntInRange(v, 0, 1000000, &o->seed);
+}
 static bool ParseSubsteps(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 1, 64, &o->velocitySubsteps);
 }
@@ -133,7 +141,8 @@ static const OptionSpec OPTION_SPECS[] = {
     {"--shape-x", ParseShapeX},      {"--shape-y", ParseShapeY},
     {"--shape-size", ParseShapeSize}, {"--lines", ParseLines},
     {"--line-width", ParseLineWidth}, {"--wind-kmh", ParseWind},
-    {"--vorticity", ParseVorticity}, {"--substeps", ParseSubsteps},
+    {"--vorticity", ParseVorticity}, {"--turbulence", ParseTurbulence},
+    {"--seed", ParseSeed},           {"--substeps", ParseSubsteps},
     {"--vcycles", ParseVCycles},     {"--search-steps", ParseSearchSteps},
     {"--supersample", ParseSupersample},
     {"--out", ParseOutputDir},
@@ -195,6 +204,8 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "  --line-width PX   smoke line width at scale 1 (default %.1f)\n"
           "  --wind-kmh N      inlet wind speed (default %.0f)\n"
           "  --vorticity X     vorticity confinement strength (default %.1f)\n"
+          "  --turbulence F    inlet gusts, fraction of wind 0-0.5 (default %.2f)\n"
+          "  --seed N          gust pattern seed (default %d)\n"
           "  --substeps N      velocity substeps at scale 1 (default %d)\n"
           "  --vcycles N       multigrid V-cycles per substep (default %d)\n"
           "  --search-steps N  export the most turbulent of the last N steps\n"
@@ -205,8 +216,8 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "palettes:",
           program, d.steps, d.scale, d.shape.centerX, d.shape.centerY,
           d.shape.size, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
-          d.vorticityStrength, d.velocitySubsteps, d.pressureVCycles,
-          d.searchSteps, d.supersample, d.outputDir);
+          d.vorticityStrength, d.turbulence, d.seed, d.velocitySubsteps,
+          d.pressureVCycles, d.searchSteps, d.supersample, d.outputDir);
   for (int i = 0; i < PaletteCount(); i++)
     fprintf(stream, " %s", PaletteAt(i)->name);
   fprintf(stream, "\n");

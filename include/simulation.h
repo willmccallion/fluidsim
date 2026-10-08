@@ -43,6 +43,8 @@ typedef struct {
   float vorticityStrength;
   int smokeLineCount;
   float smokeLineHalfWidth;
+  float inletTurbulence;
+  float inletSeed;
 } FluidSim;
 
 typedef enum {
