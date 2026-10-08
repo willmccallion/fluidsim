@@ -12,6 +12,7 @@ void InitSim(FluidSim *sim) {
   sim->buoyancyStrength = 8.0f;
   sim->windSpeed = 2857.0f;  // ~250 km/h default
   sim->pressureVCycles = 2;
+  sim->trackDisplayStats = true;
   sim->vorticityStrength = 5.0f;
   sim->smokeLineCount = 20;
   sim->smokeLineHalfWidth = 4.0f;
@@ -205,6 +206,63 @@ void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase) {
   RebuildPressureMasks(&sim->pressure);
 }
 
+static void UpdateDisplayStats(FluidSim *sim) {
+  Vector2 res = {(float)RES_X, (float)RES_Y};
+  unsigned int zeroStats[3] = {0, 0, 0};
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboStats);
+  glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zeroStats), zeroStats);
+
+  rlEnableShader(sim->shdAnalyze);
+  glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
+                     GL_R32F);
+  glBindImageTexture(1, sim->texVelocity[sim->velocityPing].id, 0, GL_FALSE, 0,
+                     GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(2, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY,
+                     GL_R32F);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, sim->ssboStats);
+  rlSetUniform(rlGetLocationUniform(sim->shdAnalyze, "res"), &res,
+               RL_SHADER_UNIFORM_VEC2, 1);
+  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+  rlDisableShader();
+
+  unsigned int readStats[3];
+  glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(readStats), readStats);
+
+  float rawMaxP = 0.0f;
+  float rawMaxV = 0.0f;
+  float rawMaxC = 0.0f;
+  memcpy(&rawMaxP, &readStats[0], sizeof(float));
+  memcpy(&rawMaxV, &readStats[1], sizeof(float));
+  memcpy(&rawMaxC, &readStats[2], sizeof(float));
+
+  if (rawMaxP < 0.0001f) rawMaxP = 0.0001f;
+  if (rawMaxV < 0.0001f) rawMaxV = 0.0001f;
+  if (rawMaxC < 0.0001f) rawMaxC = 0.0001f;
+
+  sim->maxPressureSmooth = sim->maxPressureSmooth * 0.95f + rawMaxP * 0.05f;
+  sim->maxVelocitySmooth = sim->maxVelocitySmooth * 0.95f + rawMaxV * 0.05f;
+  sim->maxCurlSmooth     = sim->maxCurlSmooth     * 0.95f + rawMaxC * 0.05f;
+}
+
+static void DispatchAerodynamicForces(FluidSim *sim) {
+  Vector2 res = {(float)RES_X, (float)RES_Y};
+  int zero[2] = {0, 0};
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboForce);
+  glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zero), zero);
+  rlEnableShader(sim->shdForce);
+  glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
+                     GL_R32F);
+  glBindImageTexture(1, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
+                     GL_R32F);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, sim->ssboForce);
+  rlSetUniform(rlGetLocationUniform(sim->shdForce, "res"), &res,
+               RL_SHADER_UNIFORM_VEC2, 1);
+  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+  rlDisableShader();
+}
+
 /** Semi-Lagrangian advection of `src` into `dst` by the current velocity. */
 static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
                    float dt) {
@@ -232,7 +290,6 @@ static void AdvectDensity(FluidSim *sim, float dt) {
 }
 
 static void StepVelocity(FluidSim *sim, float dt, float time) {
-  Vector2 res = {(float)RES_X, (float)RES_Y};
   int next = !sim->velocityPing;
   Advect(sim, sim->texVelocity[sim->velocityPing], sim->texVelocity[next], dt);
   sim->velocityPing = next;
@@ -305,59 +362,10 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
 
-  // --- AUTO-RANGE ANALYSIS ---
-  unsigned int zeroStats[3] = {0, 0, 0};
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboStats);
-  glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zeroStats), zeroStats);
-
-  rlEnableShader(sim->shdAnalyze);
-  glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R32F);
-  glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_RGBA32F);
-  glBindImageTexture(2, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R32F);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, sim->ssboStats);
-  rlSetUniform(rlGetLocationUniform(sim->shdAnalyze, "res"), &res,
-               RL_SHADER_UNIFORM_VEC2, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
-  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-  rlDisableShader();
-
-  unsigned int readStats[3];
-  glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(readStats), readStats);
-
-  float rawMaxP = 0.0f;
-  float rawMaxV = 0.0f;
-  float rawMaxC = 0.0f;
-  memcpy(&rawMaxP, &readStats[0], sizeof(float));
-  memcpy(&rawMaxV, &readStats[1], sizeof(float));
-  memcpy(&rawMaxC, &readStats[2], sizeof(float));
-
-  if (rawMaxP < 0.0001f) rawMaxP = 0.0001f;
-  if (rawMaxV < 0.0001f) rawMaxV = 0.0001f;
-  if (rawMaxC < 0.0001f) rawMaxC = 0.0001f;
-
-  sim->maxPressureSmooth = sim->maxPressureSmooth * 0.95f + rawMaxP * 0.05f;
-  sim->maxVelocitySmooth = sim->maxVelocitySmooth * 0.95f + rawMaxV * 0.05f;
-  sim->maxCurlSmooth     = sim->maxCurlSmooth     * 0.95f + rawMaxC * 0.05f;
-
-  // --- Force Calculation ---
-  if (sim->enableWindTunnel) {
-    int zero[2] = {0, 0};
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboForce);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zero), zero);
-    rlEnableShader(sim->shdForce);
-    glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R32F);
-    glBindImageTexture(1, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R32F);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, sim->ssboForce);
-    rlSetUniform(rlGetLocationUniform(sim->shdForce, "res"), &res,
-                 RL_SHADER_UNIFORM_VEC2, 1);
-    rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-    rlDisableShader();
+  if (sim->trackDisplayStats) {
+    UpdateDisplayStats(sim);
+    if (sim->enableWindTunnel)
+      DispatchAerodynamicForces(sim);
   }
 }
 

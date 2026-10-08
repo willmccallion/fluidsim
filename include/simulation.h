@@ -36,6 +36,7 @@ typedef struct {
   float buoyancyStrength;
   float windSpeed;
   int pressureVCycles;
+  bool trackDisplayStats;
   float vorticityStrength;
   int smokeLineCount;
   float smokeLineHalfWidth;
