@@ -6,6 +6,8 @@ layout(binding = 1, rgba32f) uniform image2D texDens;
 
 uniform float time;
 uniform float windSpeed;
+uniform int lineCount;
+uniform float lineHalfWidth;
 
 void main() {
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
@@ -16,13 +18,12 @@ void main() {
         // 1. Force uniform velocity
         imageStore(texVel, coords, vec4(windSpeed, 0.0, 0.0, 0.0));
 
-        // 2. Smoke rake — 20 evenly-spaced streamlines
-        float numLines = 20.0;
-        float spacing  = size.y / numLines;
+        // 2. Smoke rake — evenly-spaced streamlines
+        float spacing  = size.y / float(lineCount);
         float dist     = abs(mod(float(coords.y), spacing) - spacing * 0.5);
 
-        // Thick crisp lines with soft edges
-        float smoke = smoothstep(7.0, 4.0, dist);
+        // Crisp lines with soft edges
+        float smoke = smoothstep(lineHalfWidth * 1.75, lineHalfWidth, dist);
 
         // Allow lines across 10-90% of height (wider coverage)
         if (coords.y < int(size.y * 0.10) || coords.y > int(size.y * 0.90))

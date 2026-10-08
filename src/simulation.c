@@ -11,6 +11,9 @@ void InitSim(FluidSim *sim) {
   sim->buoyancyStrength = 8.0f;
   sim->windSpeed = 2857.0f;  // ~250 km/h default
   sim->pressureVCycles = 2;
+  sim->vorticityStrength = 5.0f;
+  sim->smokeLineCount = 20;
+  sim->smokeLineHalfWidth = 4.0f;
 
   // Initialize Smooth Stats
   sim->maxPressureSmooth = 1.0f;
@@ -241,6 +244,10 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
                  RL_SHADER_UNIFORM_FLOAT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "windSpeed"), &sim->windSpeed,
                  RL_SHADER_UNIFORM_FLOAT, 1);
+    rlSetUniform(rlGetLocationUniform(sim->shdInlet, "lineCount"),
+                 &sim->smokeLineCount, RL_SHADER_UNIFORM_INT, 1);
+    rlSetUniform(rlGetLocationUniform(sim->shdInlet, "lineHalfWidth"),
+                 &sim->smokeLineHalfWidth, RL_SHADER_UNIFORM_FLOAT, 1);
     rlComputeShaderDispatch(2, (RES_Y + 15) / 16, 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     rlDisableShader();
@@ -260,11 +267,10 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_WRITE,
                      GL_RGBA32F);
   glBindImageTexture(1, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
-  float curlStr = 5.0f;
   rlSetUniform(rlGetLocationUniform(sim->shdVorticity, "dt"), &dt,
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdVorticity, "curlStrength"),
-               &curlStr, RL_SHADER_UNIFORM_FLOAT, 1);
+               &sim->vorticityStrength, RL_SHADER_UNIFORM_FLOAT, 1);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
