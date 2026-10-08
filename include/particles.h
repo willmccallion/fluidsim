@@ -20,7 +20,7 @@ typedef struct {
 
 void InitParticles(ParticleSys *sys);
 void UpdateParticles(ParticleSys *sys, FluidSim *sim, float dt, float time);
-void DrawParticles(ParticleSys *sys);
-void SeedWindTunnelParticles(ParticleSys *sys, float dt);
+void DrawParticles(ParticleSys *sys, const FluidSim *sim);
+void SeedWindTunnelParticles(ParticleSys *sys, const FluidSim *sim, float dt);
 
 #endif

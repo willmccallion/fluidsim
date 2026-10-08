@@ -5,7 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-void InitSim(FluidSim *sim) {
+static unsigned int GroupCount(int cells) { return (unsigned int)(cells + 15) / 16; }
+
+static void DispatchOverGrid(const FluidSim *sim) {
+  rlComputeShaderDispatch(GroupCount(sim->width), GroupCount(sim->height), 1);
+}
+
+void InitSim(FluidSim *sim, int width, int height) {
+  sim->width = width;
+  sim->height = height;
   sim->velocityPing = 0;
   sim->densityPing = 0;
   sim->enableWindTunnel = true;
@@ -23,14 +31,14 @@ void InitSim(FluidSim *sim) {
   sim->maxCurlSmooth = 1.0f;
 
   // Create Textures
-  sim->texDensity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
-  sim->texDensity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
-  sim->texVelocity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
-  sim->texVelocity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
-  sim->texPressure = CreateTexture2D(RES_X, RES_Y, GL_R32F);
-  sim->texDivergence = CreateTexture2D(RES_X, RES_Y, GL_R32F);
-  sim->texCurl = CreateTexture2D(RES_X, RES_Y, GL_R32F);
-  sim->texObstacles = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texDensity[0] = CreateTexture2D(width, height, GL_RGBA32F);
+  sim->texDensity[1] = CreateTexture2D(width, height, GL_RGBA32F);
+  sim->texVelocity[0] = CreateTexture2D(width, height, GL_RGBA32F);
+  sim->texVelocity[1] = CreateTexture2D(width, height, GL_RGBA32F);
+  sim->texPressure = CreateTexture2D(width, height, GL_R32F);
+  sim->texDivergence = CreateTexture2D(width, height, GL_R32F);
+  sim->texCurl = CreateTexture2D(width, height, GL_R32F);
+  sim->texObstacles = CreateTexture2D(width, height, GL_R32F);
 
   // Load Shaders
   sim->shdAdvect =
@@ -75,7 +83,7 @@ void InitSim(FluidSim *sim) {
   ResetSim(sim, SCENE_CAR_WIND_TUNNEL);
 }
 
-static void RasterizeCarMask(float *oData) {
+static void RasterizeCarMask(float *oData, int width, int height) {
   // Load car silhouette from image.
   // The image is black car on white background, already flipped to face left.
   // We threshold: dark pixels (< 128) = solid obstacle.
@@ -87,10 +95,10 @@ static void RasterizeCarMask(float *oData) {
 
     // Target region in simulation space — preserve the image's aspect ratio.
     float aspect = (float)carImg.width / (float)carImg.height;
-    int carW = (int)(RES_X * 0.62f);        // car spans 62% of grid width
+    int carW = (int)(width * 0.62f);        // car spans 62% of grid width
     int carH = (int)(carW / aspect);         // height derived from aspect ratio
-    int carX = (int)(RES_X * 0.05f);        // left margin
-    int carY = (RES_Y - carH) / 2;          // vertically centered
+    int carX = (int)(width * 0.05f);        // left margin
+    int carY = (height - carH) / 2;          // vertically centered
 
     ImageResize(&carImg, carW, carH);
 
@@ -102,8 +110,8 @@ static void RasterizeCarMask(float *oData) {
           // Texture y=0 is bottom of screen; image y=0 is top — flip vertically
           int tx = carX + ix;
           int ty = carY + (carH - 1 - iy);
-          if (tx >= 0 && tx < RES_X && ty >= 0 && ty < RES_Y)
-            oData[ty * RES_X + tx] = 1.0f;
+          if (tx >= 0 && tx < width && ty >= 0 && ty < height)
+            oData[ty * width + tx] = 1.0f;
         }
       }
     }
@@ -113,27 +121,29 @@ static void RasterizeCarMask(float *oData) {
   }
 }
 
-static void RasterizeCircle(float *oData, Vector2 center, float radius) {
-  for (int y = 0; y < RES_Y; y++) {
-    for (int x = 0; x < RES_X; x++) {
+static void RasterizeCircle(float *oData, int width, int height,
+                            Vector2 center, float radius) {
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
       float dx = (float)x - center.x;
       float dy = (float)y - center.y;
       if (dx * dx + dy * dy < radius * radius)
-        oData[y * RES_X + x] = 1.0f;
+        oData[y * width + x] = 1.0f;
     }
   }
 }
 
 static void UploadSceneObstacles(FluidSim *sim, SimScene scene) {
-  float *oData = (float *)calloc(RES_X * RES_Y, sizeof(float));
+  float *oData = (float *)calloc((size_t)sim->width * sim->height, sizeof(float));
   if (scene == SCENE_CAR_WIND_TUNNEL)
-    RasterizeCarMask(oData);
+    RasterizeCarMask(oData, sim->width, sim->height);
   else
-    RasterizeCircle(oData,
-                    (Vector2){CIRCLE_SCENE_CENTER_X, CIRCLE_SCENE_CENTER_Y},
-                    CIRCLE_SCENE_RADIUS);
+    RasterizeCircle(oData, sim->width, sim->height,
+                    (Vector2){sim->width * CIRCLE_SCENE_CENTER_X_FRACTION,
+                              sim->height * CIRCLE_SCENE_CENTER_Y_FRACTION},
+                    sim->height * CIRCLE_SCENE_RADIUS_FRACTION);
   glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RED, GL_FLOAT,
                   oData);
   free(oData);
 }
@@ -143,28 +153,29 @@ void ResetSim(FluidSim *sim, SimScene scene) {
   sim->maxPressureSmooth = 0.1f;
   sim->maxVelocitySmooth = 0.1f;
 
-  float *zeroData = (float *)calloc(RES_X * RES_Y * 4, sizeof(float));
+  float *zeroData =
+      (float *)calloc((size_t)sim->width * sim->height * 4, sizeof(float));
 
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[0].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RGBA, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
                   zeroData);
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[1].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RGBA, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
                   zeroData);
 
   glBindTexture(GL_TEXTURE_2D, sim->texDensity[0].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RGBA, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
                   zeroData);
   glBindTexture(GL_TEXTURE_2D, sim->texDensity[1].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RGBA, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
                   zeroData);
 
   glBindTexture(GL_TEXTURE_2D, sim->texPressure.id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RED, GL_FLOAT,
                   zeroData);
 
   glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RED, GL_FLOAT,
                   zeroData);
 
   free(zeroData);
@@ -185,7 +196,7 @@ void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdSplat, "color"), &color,
                RL_SHADER_UNIFORM_VEC4, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
 }
@@ -201,14 +212,14 @@ void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase) {
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdPaint, "value"), &val,
                RL_SHADER_UNIFORM_FLOAT, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
   RebuildPressureMasks(&sim->pressure);
 }
 
 static void UpdateDisplayStats(FluidSim *sim) {
-  Vector2 res = {(float)RES_X, (float)RES_Y};
+  Vector2 res = {(float)sim->width, (float)sim->height};
   unsigned int zeroStats[3] = {0, 0, 0};
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboStats);
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zeroStats), zeroStats);
@@ -223,7 +234,7 @@ static void UpdateDisplayStats(FluidSim *sim) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, sim->ssboStats);
   rlSetUniform(rlGetLocationUniform(sim->shdAnalyze, "res"), &res,
                RL_SHADER_UNIFORM_VEC2, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   rlDisableShader();
 
@@ -247,7 +258,7 @@ static void UpdateDisplayStats(FluidSim *sim) {
 }
 
 static void DispatchAerodynamicForces(FluidSim *sim) {
-  Vector2 res = {(float)RES_X, (float)RES_Y};
+  Vector2 res = {(float)sim->width, (float)sim->height};
   int zero[2] = {0, 0};
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboForce);
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zero), zero);
@@ -259,7 +270,7 @@ static void DispatchAerodynamicForces(FluidSim *sim) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, sim->ssboForce);
   rlSetUniform(rlGetLocationUniform(sim->shdForce, "res"), &res,
                RL_SHADER_UNIFORM_VEC2, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   rlDisableShader();
 }
@@ -267,7 +278,7 @@ static void DispatchAerodynamicForces(FluidSim *sim) {
 /** Semi-Lagrangian advection of `src` into `dst` by the current velocity. */
 static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
                    float dt) {
-  Vector2 res = {(float)RES_X, (float)RES_Y};
+  Vector2 res = {(float)sim->width, (float)sim->height};
   rlEnableShader(sim->shdAdvect);
   rlSetUniform(rlGetLocationUniform(sim->shdAdvect, "dt"), &dt,
                RL_SHADER_UNIFORM_FLOAT, 1);
@@ -280,7 +291,7 @@ static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_2D, src.id);
   glBindImageTexture(3, dst.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 }
 
@@ -311,7 +322,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                  &sim->smokeLineCount, RL_SHADER_UNIFORM_INT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "lineHalfWidth"),
                  &sim->smokeLineHalfWidth, RL_SHADER_UNIFORM_FLOAT, 1);
-    rlComputeShaderDispatch(2, (RES_Y + 15) / 16, 1);
+    rlComputeShaderDispatch(2, GroupCount(sim->height), 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     rlDisableShader();
   }
@@ -322,7 +333,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                      GL_RGBA32F);
   glBindImageTexture(1, sim->texCurl.id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
                      GL_R32F);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   // 4. Vorticity
@@ -334,7 +345,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdVorticity, "curlStrength"),
                &sim->vorticityStrength, RL_SHADER_UNIFORM_FLOAT, 1);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   // 5. Divergence
@@ -345,7 +356,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                      GL_R32F);
   glBindImageTexture(2, sim->texDivergence.id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
                      GL_R32F);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   // 6. Pressure
@@ -359,7 +370,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                      GL_RGBA32F);
   glBindImageTexture(2, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_R32F);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
+  DispatchOverGrid(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
 

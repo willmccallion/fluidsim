@@ -4,14 +4,16 @@
 #include "pressure.h"
 #include "utils.h"
 
-#define RES_X 2560
-#define RES_Y 1280
+#define DEFAULT_SIM_WIDTH 2560
+#define DEFAULT_SIM_HEIGHT 1280
 
-#define CIRCLE_SCENE_CENTER_X (RES_X * 0.5f)
-#define CIRCLE_SCENE_CENTER_Y (RES_Y * 0.5f)
-#define CIRCLE_SCENE_RADIUS (RES_Y * 0.1f)
+#define CIRCLE_SCENE_CENTER_X_FRACTION 0.5f
+#define CIRCLE_SCENE_CENTER_Y_FRACTION 0.5f
+#define CIRCLE_SCENE_RADIUS_FRACTION 0.1f
 
 typedef struct {
+  int width;
+  int height;
   Texture2D_GL texDensity[2];
   Texture2D_GL texVelocity[2];
   Texture2D_GL texPressure;
@@ -52,7 +54,7 @@ typedef enum {
   SCENE_CIRCLE_WIND_TUNNEL = 2,
 } SimScene;
 
-void InitSim(FluidSim *sim);
+void InitSim(FluidSim *sim, int width, int height);
 void ResetSim(FluidSim *sim, SimScene scene);
 void UpdateSim(FluidSim *sim, float dt, float time);
 /**

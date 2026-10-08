@@ -12,13 +12,17 @@ typedef enum {
 
 typedef struct {
   int steps;
+  /** Grid multiplier over the 2560x1280 default; image detail scales too. */
+  int scale;
   /** NULL renders every palette. */
   const Palette *palette;
   FrameKind frame;
   int smokeLineCount;
+  /** Line width in default-grid cells; multiplied by `scale`. */
   float smokeLineWidth;
   float windKmh;
   float vorticityStrength;
+  /** Substeps at scale 1; multiplied by `scale` to keep the CFL number. */
   int velocitySubsteps;
   int pressureVCycles;
   const char *outputDir;

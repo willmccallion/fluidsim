@@ -79,12 +79,12 @@ static void ReadTexture(Texture2D_GL tex, GLenum format, float *out) {
 }
 
 bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out) {
-  size_t cellCount = (size_t)RES_X * RES_Y;
+  size_t cellCount = (size_t)sim->width * sim->height;
   StreaklineFields f = {.velocityRG = malloc(cellCount * 2 * sizeof(float)),
                         .smokeRGB = malloc(cellCount * 3 * sizeof(float)),
                         .obstacles = malloc(cellCount * sizeof(float)),
-                        .width = RES_X,
-                        .height = RES_Y};
+                        .width = sim->width,
+                        .height = sim->height};
   if (f.velocityRG == NULL || f.smokeRGB == NULL || f.obstacles == NULL) {
     FreeStreaklineFields(&f);
     return false;

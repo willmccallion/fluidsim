@@ -6,6 +6,7 @@
 
 PngOptions DefaultPngOptions(void) {
   return (PngOptions){.steps = 2000,
+                      .scale = 1,
                       .palette = NULL,
                       .frame = FRAME_SQUARE,
                       .smokeLineCount = 60,
@@ -66,6 +67,9 @@ static bool ParsePalette(const char *text, const Palette **out) {
 static bool ParseSteps(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 1, 1000000, &o->steps);
 }
+static bool ParseScale(const char *v, PngOptions *o) {
+  return ParseIntInRange(v, 1, 4, &o->scale);
+}
 static bool ParsePaletteOption(const char *v, PngOptions *o) {
   return ParsePalette(v, &o->palette);
 }
@@ -101,7 +105,8 @@ typedef struct {
 } OptionSpec;
 
 static const OptionSpec OPTION_SPECS[] = {
-    {"--steps", ParseSteps},         {"--palette", ParsePaletteOption},
+    {"--steps", ParseSteps},         {"--scale", ParseScale},
+    {"--palette", ParsePaletteOption},
     {"--frame", ParseFrameOption},   {"--lines", ParseLines},
     {"--line-width", ParseLineWidth}, {"--wind-kmh", ParseWind},
     {"--vorticity", ParseVorticity}, {"--substeps", ParseSubsteps},
@@ -151,18 +156,19 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "<out>/sphere-<palette>.png for each requested palette.\n"
           "\n"
           "  --steps N         simulation steps of 0.005 s (default %d)\n"
+          "  --scale N         grid resolution multiplier 1-4 (default %d)\n"
           "  --palette NAME    palette name or 'all' (default all)\n"
           "  --frame KIND      square or wide (default square)\n"
           "  --lines N         inlet smoke lines (default %d)\n"
-          "  --line-width PX   smoke line core width (default %.1f)\n"
+          "  --line-width PX   smoke line width at scale 1 (default %.1f)\n"
           "  --wind-kmh N      inlet wind speed (default %.0f)\n"
           "  --vorticity X     vorticity confinement strength (default %.1f)\n"
-          "  --substeps N      velocity substeps per step (default %d)\n"
+          "  --substeps N      velocity substeps at scale 1 (default %d)\n"
           "  --vcycles N       multigrid V-cycles per substep (default %d)\n"
           "  --out DIR         output directory (default %s)\n"
           "\n"
           "palettes:",
-          program, d.steps, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
+          program, d.steps, d.scale, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
           d.vorticityStrength, d.velocitySubsteps, d.pressureVCycles,
           d.outputDir);
   for (int i = 0; i < PaletteCount(); i++)

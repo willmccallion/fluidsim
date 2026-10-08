@@ -1,11 +1,6 @@
 #include "particles.h"
 #include <stdlib.h>
 
-// Ensure RES_Y is available
-#ifndef RES_Y
-#define RES_Y 1280
-#endif
-
 int particleHead = 0;
 
 void InitParticles(ParticleSys *sys) {
@@ -27,13 +22,13 @@ void InitParticles(ParticleSys *sys) {
   glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 }
 
-void SeedWindTunnelParticles(ParticleSys *sys, float dt) {
+void SeedWindTunnelParticles(ParticleSys *sys, const FluidSim *sim, float dt) {
   // Spawn 100 particles per frame for a dense stream
   int count = 100;
   Particle newParts[100];
 
   for (int i = 0; i < count; i++) {
-    float y = (float)(rand() % RES_Y);
+    float y = (float)(rand() % sim->height);
     // Spawn at inlet
     newParts[i].pos = (Vector2){5.0f, y};
     newParts[i].vel = (Vector2){1.0f, 0.0f};
@@ -56,7 +51,7 @@ void UpdateParticles(ParticleSys *sys, FluidSim *sim, float dt, float time) {
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[sim->velocityPing].id);
 
-  Vector2 res = {(float)RES_X, (float)RES_Y};
+  Vector2 res = {(float)sim->width, (float)sim->height};
   rlSetUniform(rlGetLocationUniform(sys->shdUpdate, "dt"), &dt,
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sys->shdUpdate, "res"), &res,
@@ -69,7 +64,7 @@ void UpdateParticles(ParticleSys *sys, FluidSim *sim, float dt, float time) {
   rlDisableShader();
 }
 
-void DrawParticles(ParticleSys *sys) {
+void DrawParticles(ParticleSys *sys, const FluidSim *sim) {
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, sys->ssbo);
   Particle *parts =
       (Particle *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
@@ -84,7 +79,7 @@ void DrawParticles(ParticleSys *sys) {
       rlColor4f(0.8f, 0.9f, 1.0f, alpha * 0.6f);
 
       float x = parts[i].pos.x;
-      float y = RES_Y - parts[i].pos.y;
+      float y = sim->height - parts[i].pos.y;
       float size = 1.5f;
 
       rlVertex2f(x - size, y - size);

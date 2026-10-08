@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
   // 2. Initialize Systems
   FluidSim sim;
-  InitSim(&sim);
+  InitSim(&sim, DEFAULT_SIM_WIDTH, DEFAULT_SIM_HEIGHT);
 
   ParticleSys particles;
   InitParticles(&particles);
@@ -126,8 +126,8 @@ int main(int argc, char **argv) {
     // Mouse Interaction
     Vector2 mPos = GetMousePosition();
     Vector2 mDelta = GetMouseDelta();
-    float scaleX = (float)RES_X / GetScreenWidth();
-    float scaleY = (float)RES_Y / GetScreenHeight();
+    float scaleX = (float)sim.width / GetScreenWidth();
+    float scaleY = (float)sim.height / GetScreenHeight();
     Vector2 simPos = {mPos.x * scaleX, (GetScreenHeight() - mPos.y) * scaleY};
 
     // Left Click: Add Dye & Velocity
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
 
       // Auto-spawn particles if in Wind Tunnel mode
       if (sim.enableWindTunnel)
-        SeedWindTunnelParticles(&particles, dt);
+        SeedWindTunnelParticles(&particles, &sim, dt);
 
       UpdateParticles(&particles, &sim, dt, time);
     }
@@ -213,20 +213,20 @@ int main(int argc, char **argv) {
 
     // Draw the Main Texture (Density)
     Texture2D raylibTex = {0};
-    raylibTex.width = RES_X;
-    raylibTex.height = RES_Y;
+    raylibTex.width = sim.width;
+    raylibTex.height = sim.height;
     raylibTex.mipmaps = 1;
     raylibTex.id = sim.texDensity[sim.densityPing].id;
     raylibTex.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
     SetTextureFilter(raylibTex, TEXTURE_FILTER_BILINEAR);
-    DrawTexturePro(raylibTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
+    DrawTexturePro(raylibTex, (Rectangle){0, 0, (float)sim.width, (float)-sim.height},
                    (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();
 
     // 2. Draw Particles
     if (showParticles) {
-      DrawParticles(&particles);
+      DrawParticles(&particles, &sim);
     }
 
     // 3. Draw Car — obstacle tex is R32F (red channel only).
@@ -237,12 +237,12 @@ int main(int argc, char **argv) {
     {
       Texture2D obsTex = {0};
       obsTex.id = sim.texObstacles.id;
-      obsTex.width = RES_X;
-      obsTex.height = RES_Y;
+      obsTex.width = sim.width;
+      obsTex.height = sim.height;
       obsTex.format = PIXELFORMAT_UNCOMPRESSED_R32;
       obsTex.mipmaps = 1;
       BeginShaderMode(shdObstacle);
-      DrawTexturePro(obsTex, (Rectangle){0, 0, (float)RES_X, (float)-RES_Y},
+      DrawTexturePro(obsTex, (Rectangle){0, 0, (float)sim.width, (float)-sim.height},
                      (Rectangle){0, 0, 1280, 640}, (Vector2){0, 0}, 0.0f, WHITE);
       EndShaderMode();
     }
