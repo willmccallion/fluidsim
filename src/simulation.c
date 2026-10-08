@@ -6,7 +6,8 @@
 #include <string.h>
 
 void InitSim(FluidSim *sim) {
-  sim->ping = 0;
+  sim->velocityPing = 0;
+  sim->densityPing = 0;
   sim->enableWindTunnel = true;
   sim->buoyancyStrength = 8.0f;
   sim->windSpeed = 2857.0f;  // ~250 km/h default
@@ -204,42 +205,46 @@ void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase) {
   RebuildPressureMasks(&sim->pressure);
 }
 
-void UpdateSim(FluidSim *sim, float dt, float time) {
-  int p = sim->ping;
-  int next_p = !p;
+/** Semi-Lagrangian advection of `src` into `dst` by the current velocity. */
+static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
+                   float dt) {
   Vector2 res = {(float)RES_X, (float)RES_Y};
-
-  // 1. Advect
   rlEnableShader(sim->shdAdvect);
   rlSetUniform(rlGetLocationUniform(sim->shdAdvect, "dt"), &dt,
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdAdvect, "res"), &res,
                RL_SHADER_UNIFORM_VEC2, 1);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, sim->texVelocity[p].id);
+  glBindTexture(GL_TEXTURE_2D, sim->texVelocity[sim->velocityPing].id);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
   glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, sim->texVelocity[p].id);
-  glBindImageTexture(3, sim->texVelocity[next_p].id, 0, GL_FALSE, 0,
-                     GL_WRITE_ONLY, GL_RGBA32F);
-  rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
-  glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, sim->texDensity[p].id);
-  glBindImageTexture(3, sim->texDensity[next_p].id, 0, GL_FALSE, 0,
-                     GL_WRITE_ONLY, GL_RGBA32F);
+  glBindTexture(GL_TEXTURE_2D, src.id);
+  glBindImageTexture(3, dst.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
-  sim->ping = next_p;
-  p = sim->ping;
+}
+
+static void AdvectDensity(FluidSim *sim, float dt) {
+  int next = !sim->densityPing;
+  Advect(sim, sim->texDensity[sim->densityPing], sim->texDensity[next], dt);
+  sim->densityPing = next;
+}
+
+static void StepVelocity(FluidSim *sim, float dt, float time) {
+  Vector2 res = {(float)RES_X, (float)RES_Y};
+  int next = !sim->velocityPing;
+  Advect(sim, sim->texVelocity[sim->velocityPing], sim->texVelocity[next], dt);
+  sim->velocityPing = next;
+  int p = sim->velocityPing;
 
   // 2. Inlet
   if (sim->enableWindTunnel) {
     rlEnableShader(sim->shdInlet);
     glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
                        GL_RGBA32F);
-    glBindImageTexture(1, sim->texDensity[p].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                       GL_RGBA32F);
+    glBindImageTexture(1, sim->texDensity[sim->densityPing].id, 0, GL_FALSE, 0,
+                       GL_WRITE_ONLY, GL_RGBA32F);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "time"), &time,
                  RL_SHADER_UNIFORM_FLOAT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "windSpeed"), &sim->windSpeed,
@@ -354,6 +359,18 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     rlDisableShader();
   }
+}
+
+void UpdateSimSubstepped(FluidSim *sim, float dt, float time,
+                         int velocitySubsteps) {
+  AdvectDensity(sim, dt);
+  float subDt = dt / (float)velocitySubsteps;
+  for (int i = 0; i < velocitySubsteps; i++)
+    StepVelocity(sim, subDt, time - dt + subDt * (float)(i + 1));
+}
+
+void UpdateSim(FluidSim *sim, float dt, float time) {
+  UpdateSimSubstepped(sim, dt, time, 1);
 }
 
 Vector2 GetAerodynamicForces(FluidSim *sim) {

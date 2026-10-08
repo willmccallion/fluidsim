@@ -54,7 +54,7 @@ void UpdateParticles(ParticleSys *sys, FluidSim *sim, float dt, float time) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sys->ssbo);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, sim->texVelocity[sim->ping].id);
+  glBindTexture(GL_TEXTURE_2D, sim->texVelocity[sim->velocityPing].id);
 
   Vector2 res = {(float)RES_X, (float)RES_Y};
   rlSetUniform(rlGetLocationUniform(sys->shdUpdate, "dt"), &dt,

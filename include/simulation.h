@@ -30,7 +30,8 @@ typedef struct {
   float maxVelocitySmooth;
   float maxCurlSmooth;
 
-  int ping;
+  int velocityPing;
+  int densityPing;
   bool enableWindTunnel;
   float buoyancyStrength;
   float windSpeed;
@@ -49,6 +50,12 @@ typedef enum {
 void InitSim(FluidSim *sim);
 void ResetSim(FluidSim *sim, SimScene scene);
 void UpdateSim(FluidSim *sim, float dt, float time);
+/**
+ * Advances by dt: smoke is advected once, velocity in `velocitySubsteps`
+ * smaller steps. Fewer smoke resamples keep thin smoke lines from blurring.
+ */
+void UpdateSimSubstepped(FluidSim *sim, float dt, float time,
+                         int velocitySubsteps);
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
                 Vector4 color);
 void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase);

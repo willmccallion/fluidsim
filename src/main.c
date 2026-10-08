@@ -102,13 +102,13 @@ int main() {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
       Vector4 velAdd = {mDelta.x * 20.0f * scaleX, -mDelta.y * 20.0f * scaleY,
                         0.0f, 0.0f};
-      ApplySplat(&sim, sim.texVelocity[sim.ping], simPos, brushRadius, velAdd);
+      ApplySplat(&sim, sim.texVelocity[sim.velocityPing], simPos, brushRadius, velAdd);
 
       // Rainbow Dye
       Color c = ColorFromHSV((float)GetTime() * 100.0f, 0.7f, 0.9f);
       Vector4 colAdd = {(c.r / 255.0f) * 4.0f, (c.g / 255.0f) * 4.0f,
                         (c.b / 255.0f) * 4.0f, 1.0f};
-      ApplySplat(&sim, sim.texDensity[sim.ping], simPos, brushRadius, colAdd);
+      ApplySplat(&sim, sim.texDensity[sim.densityPing], simPos, brushRadius, colAdd);
     }
 
     // Right Click: Draw Wall
@@ -165,7 +165,7 @@ int main() {
     if (viewMode == 1)
       glBindTexture(GL_TEXTURE_2D, sim.texPressure.id);
     else if (viewMode == 2)
-      glBindTexture(GL_TEXTURE_2D, sim.texVelocity[sim.ping].id);
+      glBindTexture(GL_TEXTURE_2D, sim.texVelocity[sim.velocityPing].id);
     else if (viewMode == 3)
       glBindTexture(GL_TEXTURE_2D, sim.texCurl.id);
     else
@@ -184,7 +184,7 @@ int main() {
     raylibTex.width = RES_X;
     raylibTex.height = RES_Y;
     raylibTex.mipmaps = 1;
-    raylibTex.id = sim.texDensity[sim.ping].id;
+    raylibTex.id = sim.texDensity[sim.densityPing].id;
     raylibTex.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
     SetTextureFilter(raylibTex, TEXTURE_FILTER_BILINEAR);
