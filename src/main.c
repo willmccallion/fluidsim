@@ -197,9 +197,9 @@ int main() {
       DrawParticles(&particles);
     }
 
-    // 3. Draw Car — obstacle tex is R16F (red channel only).
+    // 3. Draw Car — obstacle tex is R32F (red channel only).
     // Raylib tints by multiplying the color uniform with the texture sample.
-    // R16F maps to red channel, so: draw with RED tint gives red*mask.
+    // R32F maps to red channel, so: draw with RED tint gives red*mask.
     // We use the obstacle shader which reads .r and outputs proper RGBA.
     // Fallback: additive grey (R+G+B separately) if shader binding issues.
     {

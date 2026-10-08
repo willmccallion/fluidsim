@@ -5,8 +5,8 @@
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout(binding = 0, r16f) uniform image2D texPressure;
-layout(binding = 1, r16f) uniform image2D texObstacles;
+layout(binding = 0, r32f) uniform image2D texPressure;
+layout(binding = 1, r32f) uniform image2D texObstacles;
 
 // We use a buffer to sum up the forces from all threads.
 layout(std430, binding = 2) buffer ForceBuffer {

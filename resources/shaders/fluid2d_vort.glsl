@@ -1,8 +1,8 @@
 #version 430
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout(binding = 0, rgba16f) uniform image2D texVel;
-layout(binding = 1, r16f) uniform readonly image2D texCurl;
+layout(binding = 0, rgba32f) uniform image2D texVel;
+layout(binding = 1, r32f) uniform readonly image2D texCurl;
 
 uniform float dt;
 uniform float curlStrength;

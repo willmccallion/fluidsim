@@ -1,8 +1,8 @@
 #version 430
 layout (local_size_x = 16, local_size_y = 16) in;
 
-// We bind the obstacle texture as R16F (single channel red)
-layout(binding = 0, r16f) uniform image2D targetTex;
+// We bind the obstacle texture as R32F (single channel red)
+layout(binding = 0, r32f) uniform image2D targetTex;
 
 uniform vec2 point;
 uniform float radius;

@@ -17,15 +17,15 @@ void InitSim(FluidSim *sim) {
   sim->maxCurlSmooth = 1.0f;
 
   // Create Textures
-  sim->texDensity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA16F);
-  sim->texDensity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA16F);
-  sim->texVelocity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA16F);
-  sim->texVelocity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA16F);
-  sim->texPressure[0] = CreateTexture2D(RES_X, RES_Y, GL_R16F);
-  sim->texPressure[1] = CreateTexture2D(RES_X, RES_Y, GL_R16F);
-  sim->texDivergence = CreateTexture2D(RES_X, RES_Y, GL_R16F);
-  sim->texCurl = CreateTexture2D(RES_X, RES_Y, GL_R16F);
-  sim->texObstacles = CreateTexture2D(RES_X, RES_Y, GL_R16F);
+  sim->texDensity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
+  sim->texDensity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
+  sim->texVelocity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
+  sim->texVelocity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
+  sim->texPressure[0] = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texPressure[1] = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texDivergence = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texCurl = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texObstacles = CreateTexture2D(RES_X, RES_Y, GL_R32F);
 
   // Load Shaders
   sim->shdAdvect =
@@ -156,7 +156,7 @@ void ResetSim(FluidSim *sim, int mode) {
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
                 Vector4 color) {
   rlEnableShader(sim->shdSplat);
-  glBindImageTexture(0, tex.id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F);
+  glBindImageTexture(0, tex.id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
   rlSetUniform(rlGetLocationUniform(sim->shdSplat, "point"), &pos,
                RL_SHADER_UNIFORM_VEC2, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdSplat, "radius"), &radius,
@@ -171,7 +171,7 @@ void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
 void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase) {
   rlEnableShader(sim->shdPaint);
   glBindImageTexture(0, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_WRITE,
-                     GL_R16F);
+                     GL_R32F);
   float val = erase ? 0.0f : 1.0f;
   rlSetUniform(rlGetLocationUniform(sim->shdPaint, "point"), &pos,
                RL_SHADER_UNIFORM_VEC2, 1);
@@ -202,12 +202,12 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[p].id);
   glBindImageTexture(3, sim->texVelocity[next_p].id, 0, GL_FALSE, 0,
-                     GL_WRITE_ONLY, GL_RGBA16F);
+                     GL_WRITE_ONLY, GL_RGBA32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_2D, sim->texDensity[p].id);
   glBindImageTexture(3, sim->texDensity[next_p].id, 0, GL_FALSE, 0,
-                     GL_WRITE_ONLY, GL_RGBA16F);
+                     GL_WRITE_ONLY, GL_RGBA32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   sim->ping = next_p;
@@ -217,9 +217,9 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   if (sim->enableWindTunnel) {
     rlEnableShader(sim->shdInlet);
     glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                       GL_RGBA16F);
+                       GL_RGBA32F);
     glBindImageTexture(1, sim->texDensity[p].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                       GL_RGBA16F);
+                       GL_RGBA32F);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "time"), &time,
                  RL_SHADER_UNIFORM_FLOAT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "windSpeed"), &sim->windSpeed,
@@ -232,17 +232,17 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   // 3. Curl
   rlEnableShader(sim->shdCurl);
   glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_RGBA16F);
+                     GL_RGBA32F);
   glBindImageTexture(1, sim->texCurl.id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   // 4. Vorticity
   rlEnableShader(sim->shdVorticity);
   glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_WRITE,
-                     GL_RGBA16F);
-  glBindImageTexture(1, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R16F);
+                     GL_RGBA32F);
+  glBindImageTexture(1, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
   float curlStr = 5.0f;
   rlSetUniform(rlGetLocationUniform(sim->shdVorticity, "dt"), &dt,
                RL_SHADER_UNIFORM_FLOAT, 1);
@@ -254,11 +254,11 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   // 5. Divergence
   rlEnableShader(sim->shdDivergence);
   glBindImageTexture(0, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_RGBA16F);
+                     GL_RGBA32F);
   glBindImageTexture(1, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   glBindImageTexture(2, sim->texDivergence.id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -266,13 +266,13 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   rlEnableShader(sim->shdJacobi);
   for (int i = 0; i < 80; i++) {
     glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     glBindImageTexture(1, sim->texDivergence.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     glBindImageTexture(2, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     glBindImageTexture(3, sim->texPressure[1].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     Texture2D_GL tmp = sim->texPressure[0];
@@ -283,11 +283,11 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   // 7. Subtract
   rlEnableShader(sim->shdSubtract);
   glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_WRITE,
-                     GL_RGBA16F);
+                     GL_RGBA32F);
   glBindImageTexture(2, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
@@ -299,11 +299,11 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
 
   rlEnableShader(sim->shdAnalyze);
   glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_RGBA16F);
+                     GL_RGBA32F);
   glBindImageTexture(2, sim->texCurl.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                     GL_R16F);
+                     GL_R32F);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, sim->ssboStats);
   rlSetUniform(rlGetLocationUniform(sim->shdAnalyze, "res"), &res,
                RL_SHADER_UNIFORM_VEC2, 1);
@@ -336,9 +336,9 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zero), zero);
     rlEnableShader(sim->shdForce);
     glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     glBindImageTexture(1, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R16F);
+                       GL_R32F);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, sim->ssboForce);
     rlSetUniform(rlGetLocationUniform(sim->shdForce, "res"), &res,
                  RL_SHADER_UNIFORM_VEC2, 1);

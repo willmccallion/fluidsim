@@ -8,7 +8,7 @@ Texture2D_GL CreateTexture2D(int w, int h, int format) {
 
   GLenum internalFormat = format;
   GLenum dataFormat = GL_RGBA;
-  if (format == GL_R16F)
+  if (format == GL_R32F)
     dataFormat = GL_RED;
 
   glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, dataFormat, GL_FLOAT,

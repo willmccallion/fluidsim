@@ -11,7 +11,7 @@ layout(binding = 0) uniform sampler2D texVelocity;
 layout(binding = 1) uniform sampler2D texObstacles;
 layout(binding = 2) uniform sampler2D texSource; // Density or Velocity
 
-layout(binding = 3, rgba16f) uniform writeonly image2D texDest;
+layout(binding = 3, rgba32f) uniform writeonly image2D texDest;
 
 uniform float dt;
 uniform float buoyancy;

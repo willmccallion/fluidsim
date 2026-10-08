@@ -1,9 +1,9 @@
 #version 430
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout(binding = 0, r16f) uniform image2D texP;
-layout(binding = 1, rgba16f) uniform image2D texVel;
-layout(binding = 2, r16f) uniform image2D texObs;
+layout(binding = 0, r32f) uniform image2D texP;
+layout(binding = 1, rgba32f) uniform image2D texVel;
+layout(binding = 2, r32f) uniform image2D texObs;
 
 void main() {
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
