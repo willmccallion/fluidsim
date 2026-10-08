@@ -129,8 +129,9 @@ static void UploadSceneObstacles(FluidSim *sim, SimScene scene) {
   if (scene == SCENE_CAR_WIND_TUNNEL)
     RasterizeCarMask(oData);
   else
-    RasterizeCircle(oData, (Vector2){RES_X * 0.5f, RES_Y * 0.5f},
-                    RES_Y * 0.1f);
+    RasterizeCircle(oData,
+                    (Vector2){CIRCLE_SCENE_CENTER_X, CIRCLE_SCENE_CENTER_Y},
+                    CIRCLE_SCENE_RADIUS);
   glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
                   oData);

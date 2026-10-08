@@ -7,6 +7,10 @@
 #define RES_X 2560
 #define RES_Y 1280
 
+#define CIRCLE_SCENE_CENTER_X (RES_X * 0.5f)
+#define CIRCLE_SCENE_CENTER_Y (RES_Y * 0.5f)
+#define CIRCLE_SCENE_RADIUS (RES_Y * 0.1f)
+
 typedef struct {
   Texture2D_GL texDensity[2];
   Texture2D_GL texVelocity[2];

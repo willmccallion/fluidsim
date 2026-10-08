@@ -20,7 +20,10 @@ FetchContent_MakeAvailable(raylib)
 set(SOURCES
     src/headless.c
     src/main.c
+    src/palette.c
     src/particles.c
+    src/png_mode.c
+    src/png_options.c
     src/pressure.c
     src/progress.c
     src/simulation.c
