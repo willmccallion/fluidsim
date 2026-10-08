@@ -18,11 +18,14 @@ FetchContent_MakeAvailable(raylib)
 
 # --- Sources ---
 set(SOURCES
+    src/headless.c
     src/main.c
     src/particles.c
     src/pressure.c
+    src/progress.c
     src/simulation.c
     src/utils.c
+    src/streakline_image.c
 )
 
 # --- Resources ---
@@ -36,7 +39,7 @@ target_include_directories(fluid_sim PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 # --- Link Libraries ---
 if(UNIX AND NOT APPLE)
-    target_link_libraries(fluid_sim PRIVATE raylib m GL)
+    target_link_libraries(fluid_sim PRIVATE raylib m GL EGL)
 else()
     target_link_libraries(fluid_sim PRIVATE raylib)
 endif()

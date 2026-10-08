@@ -1,9 +1,15 @@
+#include "headless.h"
 #include "particles.h"
+#include "progress.h"
 #include "raylib.h"
 #include "rlgl.h" // Needed for rlActiveTextureSlot
 #include "simulation.h"
+#include "streakline_image.h"
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // --- OpenGL Compatibility Definitions ---
 // Ensure GL_TEXTURE_2D is available
@@ -17,7 +23,76 @@
 extern void glBindTexture(unsigned int target, unsigned int texture);
 #endif
 
-int main() {
+#define PNG_DEFAULT_STEPS 2000
+#define PNG_OUTPUT_DIR "output"
+#define PNG_OUTPUT_PATH PNG_OUTPUT_DIR "/sphere.png"
+#define PNG_SMOKE_LINE_COUNT 60
+#define PNG_SMOKE_LINE_HALF_WIDTH 2.5f
+#define PNG_VELOCITY_SUBSTEPS 4
+#define PNG_PRESSURE_VCYCLES 2
+
+static void PrintUsage(const char *program) {
+  fprintf(stderr, "usage: %s [--png [steps]]\n", program);
+}
+
+static bool ParseStepCount(const char *text, int *outSteps) {
+  char *end = NULL;
+  errno = 0;
+  long steps = strtol(text, &end, 10);
+  if (errno != 0 || end == text || *end != '\0' || steps <= 0 ||
+      steps > 1000000)
+    return false;
+  *outSteps = (int)steps;
+  return true;
+}
+
+/** Simulates flow past a circle without a window and saves its smoke lines. */
+static int RunPngMode(int steps) {
+  HeadlessContext ctx;
+  if (!InitHeadlessContext(&ctx))
+    return 1;
+
+  SetTraceLogLevel(LOG_WARNING);
+  FluidSim sim;
+  InitSim(&sim);
+  ResetSim(&sim, SCENE_CIRCLE_WIND_TUNNEL);
+  sim.smokeLineCount = PNG_SMOKE_LINE_COUNT;
+  sim.smokeLineHalfWidth = PNG_SMOKE_LINE_HALF_WIDTH;
+  sim.pressureVCycles = PNG_PRESSURE_VCYCLES;
+  sim.trackDisplayStats = false;
+
+  float dt = 0.005f;
+  float time = 0.0f;
+  ProgressBar progress = StartProgress(steps);
+  for (int step = 1; step <= steps; step++) {
+    time += dt;
+    UpdateSimSubstepped(&sim, dt, time, PNG_VELOCITY_SUBSTEPS);
+    UpdateProgress(&progress, step);
+  }
+  FinishProgress(&progress);
+
+  bool exported = MakeDirectory(PNG_OUTPUT_DIR) == 0 &&
+                  ExportStreaklineImage(&sim, PNG_OUTPUT_PATH);
+  CloseHeadlessContext(&ctx);
+  if (!exported) {
+    TraceLog(LOG_ERROR, "PNG: Failed to write %s", PNG_OUTPUT_PATH);
+    return 1;
+  }
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  if (argc > 1) {
+    int steps = PNG_DEFAULT_STEPS;
+    bool validArgs = strcmp(argv[1], "--png") == 0 && argc <= 3 &&
+                     (argc == 2 || ParseStepCount(argv[2], &steps));
+    if (!validArgs) {
+      PrintUsage(argv[0]);
+      return 1;
+    }
+    return RunPngMode(steps);
+  }
+
   // 1. Setup Window
   InitWindow(1280, 640, "2D Fluid: Real-Time CFD Engine");
   SetTargetFPS(60);
