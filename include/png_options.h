@@ -25,6 +25,8 @@ typedef struct {
   /** Substeps at scale 1; multiplied by `scale` to keep the CFL number. */
   int velocitySubsteps;
   int pressureVCycles;
+  /** Export the most turbulent frame of the last N steps; 0 = final step. */
+  int searchSteps;
   const char *outputDir;
 } PngOptions;
 

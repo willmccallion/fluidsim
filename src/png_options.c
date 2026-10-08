@@ -15,6 +15,7 @@ PngOptions DefaultPngOptions(void) {
                       .vorticityStrength = 5.0f,
                       .velocitySubsteps = 4,
                       .pressureVCycles = 2,
+                      .searchSteps = 500,
                       .outputDir = "output"};
 }
 
@@ -94,6 +95,9 @@ static bool ParseSubsteps(const char *v, PngOptions *o) {
 static bool ParseVCycles(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 1, 32, &o->pressureVCycles);
 }
+static bool ParseSearchSteps(const char *v, PngOptions *o) {
+  return ParseIntInRange(v, 0, 1000000, &o->searchSteps);
+}
 static bool ParseOutputDir(const char *v, PngOptions *o) {
   o->outputDir = v;
   return v[0] != '\0';
@@ -110,7 +114,8 @@ static const OptionSpec OPTION_SPECS[] = {
     {"--frame", ParseFrameOption},   {"--lines", ParseLines},
     {"--line-width", ParseLineWidth}, {"--wind-kmh", ParseWind},
     {"--vorticity", ParseVorticity}, {"--substeps", ParseSubsteps},
-    {"--vcycles", ParseVCycles},     {"--out", ParseOutputDir},
+    {"--vcycles", ParseVCycles},     {"--search-steps", ParseSearchSteps},
+    {"--out", ParseOutputDir},
 };
 
 static const OptionSpec *FindOptionSpec(const char *flag) {
@@ -165,12 +170,14 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "  --vorticity X     vorticity confinement strength (default %.1f)\n"
           "  --substeps N      velocity substeps at scale 1 (default %d)\n"
           "  --vcycles N       multigrid V-cycles per substep (default %d)\n"
+          "  --search-steps N  export the most turbulent of the last N steps\n"
+          "                    (default %d, 0 = final step)\n"
           "  --out DIR         output directory (default %s)\n"
           "\n"
           "palettes:",
           program, d.steps, d.scale, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
           d.vorticityStrength, d.velocitySubsteps, d.pressureVCycles,
-          d.outputDir);
+          d.searchSteps, d.outputDir);
   for (int i = 0; i < PaletteCount(); i++)
     fprintf(stream, " %s", PaletteAt(i)->name);
   fprintf(stream, "\n");
