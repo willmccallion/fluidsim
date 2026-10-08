@@ -163,7 +163,7 @@ int main() {
     // Bind Secondary Texture (Data) to Slot 1
     rlActiveTextureSlot(1);
     if (viewMode == 1)
-      glBindTexture(GL_TEXTURE_2D, sim.texPressure[0].id);
+      glBindTexture(GL_TEXTURE_2D, sim.texPressure.id);
     else if (viewMode == 2)
       glBindTexture(GL_TEXTURE_2D, sim.texVelocity[sim.ping].id);
     else if (viewMode == 3)

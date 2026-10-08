@@ -18,9 +18,9 @@ void main() {
     ivec2 D = coords - ivec2(0,1);
     ivec2 U = coords + ivec2(0,1);
 
-    // Use Neumann boundaries again to match the solver
+    // Same boundaries as the pressure solver (see mg_smooth.glsl)
     float pL = (L.x < 0 || imageLoad(texObs, L).r > 0.5) ? pC : imageLoad(texP, L).r;
-    float pR = (R.x >= size.x || imageLoad(texObs, R).r > 0.5) ? pC : imageLoad(texP, R).r;
+    float pR = (R.x >= size.x) ? -pC : (imageLoad(texObs, R).r > 0.5) ? pC : imageLoad(texP, R).r;
     float pD = (D.y < 0 || imageLoad(texObs, D).r > 0.5) ? pC : imageLoad(texP, D).r;
     float pU = (U.y >= size.y || imageLoad(texObs, U).r > 0.5) ? pC : imageLoad(texP, U).r;
 

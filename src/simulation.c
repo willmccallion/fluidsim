@@ -10,6 +10,7 @@ void InitSim(FluidSim *sim) {
   sim->enableWindTunnel = true;
   sim->buoyancyStrength = 8.0f;
   sim->windSpeed = 2857.0f;  // ~250 km/h default
+  sim->pressureVCycles = 2;
 
   // Initialize Smooth Stats
   sim->maxPressureSmooth = 1.0f;
@@ -21,8 +22,7 @@ void InitSim(FluidSim *sim) {
   sim->texDensity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
   sim->texVelocity[0] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
   sim->texVelocity[1] = CreateTexture2D(RES_X, RES_Y, GL_RGBA32F);
-  sim->texPressure[0] = CreateTexture2D(RES_X, RES_Y, GL_R32F);
-  sim->texPressure[1] = CreateTexture2D(RES_X, RES_Y, GL_R32F);
+  sim->texPressure = CreateTexture2D(RES_X, RES_Y, GL_R32F);
   sim->texDivergence = CreateTexture2D(RES_X, RES_Y, GL_R32F);
   sim->texCurl = CreateTexture2D(RES_X, RES_Y, GL_R32F);
   sim->texObstacles = CreateTexture2D(RES_X, RES_Y, GL_R32F);
@@ -32,8 +32,6 @@ void InitSim(FluidSim *sim) {
       LoadCompute(LoadFileText("resources/shaders/fluid2d_advect.glsl"));
   sim->shdDivergence =
       LoadCompute(LoadFileText("resources/shaders/fluid2d_div.glsl"));
-  sim->shdJacobi =
-      LoadCompute(LoadFileText("resources/shaders/fluid2d_jacobi.glsl"));
   sim->shdSubtract =
       LoadCompute(LoadFileText("resources/shaders/fluid2d_sub.glsl"));
   sim->shdCurl =
@@ -67,6 +65,8 @@ void InitSim(FluidSim *sim) {
                GL_DYNAMIC_READ);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
+  sim->pressure = InitPressureSolver(sim->texPressure, sim->texDivergence,
+                                     sim->texObstacles);
   ResetSim(sim, SCENE_CAR_WIND_TUNNEL);
 }
 
@@ -153,10 +153,7 @@ void ResetSim(FluidSim *sim, SimScene scene) {
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RGBA, GL_FLOAT,
                   zeroData);
 
-  glBindTexture(GL_TEXTURE_2D, sim->texPressure[0].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
-                  zeroData);
-  glBindTexture(GL_TEXTURE_2D, sim->texPressure[1].id);
+  glBindTexture(GL_TEXTURE_2D, sim->texPressure.id);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
                   zeroData);
 
@@ -169,6 +166,7 @@ void ResetSim(FluidSim *sim, SimScene scene) {
   sim->buoyancyStrength = scene == SCENE_FREE ? 8.0f : 0.0f;
   if (scene != SCENE_FREE)
     UploadSceneObstacles(sim, scene);
+  RebuildPressureMasks(&sim->pressure);
 }
 
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
@@ -200,6 +198,7 @@ void PaintObstacle(FluidSim *sim, Vector2 pos, float radius, bool erase) {
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
+  RebuildPressureMasks(&sim->pressure);
 }
 
 void UpdateSim(FluidSim *sim, float dt, float time) {
@@ -280,27 +279,12 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-  // 6. Jacobi
-  rlEnableShader(sim->shdJacobi);
-  for (int i = 0; i < 80; i++) {
-    glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R32F);
-    glBindImageTexture(1, sim->texDivergence.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R32F);
-    glBindImageTexture(2, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
-                       GL_R32F);
-    glBindImageTexture(3, sim->texPressure[1].id, 0, GL_FALSE, 0, GL_WRITE_ONLY,
-                       GL_R32F);
-    rlComputeShaderDispatch((RES_X + 15) / 16, (RES_Y + 15) / 16, 1);
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    Texture2D_GL tmp = sim->texPressure[0];
-    sim->texPressure[0] = sim->texPressure[1];
-    sim->texPressure[1] = tmp;
-  }
+  // 6. Pressure
+  SolvePressure(&sim->pressure, sim->pressureVCycles);
 
   // 7. Subtract
   rlEnableShader(sim->shdSubtract);
-  glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
+  glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_R32F);
   glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_WRITE,
                      GL_RGBA32F);
@@ -316,7 +300,7 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zeroStats), zeroStats);
 
   rlEnableShader(sim->shdAnalyze);
-  glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
+  glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_R32F);
   glBindImageTexture(1, sim->texVelocity[p].id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_RGBA32F);
@@ -353,7 +337,7 @@ void UpdateSim(FluidSim *sim, float dt, float time) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sim->ssboForce);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(zero), zero);
     rlEnableShader(sim->shdForce);
-    glBindImageTexture(0, sim->texPressure[0].id, 0, GL_FALSE, 0, GL_READ_ONLY,
+    glBindImageTexture(0, sim->texPressure.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                        GL_R32F);
     glBindImageTexture(1, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                        GL_R32F);

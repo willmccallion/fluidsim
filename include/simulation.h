@@ -1,6 +1,7 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
+#include "pressure.h"
 #include "utils.h"
 
 #define RES_X 2560
@@ -9,13 +10,12 @@
 typedef struct {
   Texture2D_GL texDensity[2];
   Texture2D_GL texVelocity[2];
-  Texture2D_GL texPressure[2];
+  Texture2D_GL texPressure;
   Texture2D_GL texDivergence;
   Texture2D_GL texCurl;
   Texture2D_GL texObstacles;
 
-  unsigned int shdAdvect, shdDivergence, shdJacobi, shdSubtract, shdCurl,
-      shdVorticity;
+  unsigned int shdAdvect, shdDivergence, shdSubtract, shdCurl, shdVorticity;
   unsigned int shdSplat, shdInlet, shdPaint;
   unsigned int shdForce;
 
@@ -23,6 +23,7 @@ typedef struct {
   unsigned int shdAnalyze;
   unsigned int ssboStats;
   unsigned int ssboForce;
+  PressureSolver pressure;
 
   // Smoothed stats for auto-exposure (prevents flickering)
   float maxPressureSmooth;
@@ -33,6 +34,7 @@ typedef struct {
   bool enableWindTunnel;
   float buoyancyStrength;
   float windSpeed;
+  int pressureVCycles;
 } FluidSim;
 
 typedef enum {

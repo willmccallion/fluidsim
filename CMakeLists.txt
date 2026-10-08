@@ -20,6 +20,7 @@ FetchContent_MakeAvailable(raylib)
 set(SOURCES
     src/main.c
     src/particles.c
+    src/pressure.c
     src/simulation.c
     src/utils.c
 )
