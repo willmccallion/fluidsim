@@ -71,11 +71,11 @@ int main() {
 
     // Reset Modes
     if (IsKeyPressed(KEY_ONE)) {
-      ResetSim(&sim, 0);
+      ResetSim(&sim, SCENE_FREE);
       sim.enableWindTunnel = false;
     }
     if (IsKeyPressed(KEY_TWO)) {
-      ResetSim(&sim, 1);
+      ResetSim(&sim, SCENE_CAR_WIND_TUNNEL);
       sim.enableWindTunnel = true;
     }
 

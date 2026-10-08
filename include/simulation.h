@@ -35,8 +35,14 @@ typedef struct {
   float windSpeed;
 } FluidSim;
 
+typedef enum {
+  SCENE_FREE = 0,
+  SCENE_CAR_WIND_TUNNEL = 1,
+  SCENE_CIRCLE_WIND_TUNNEL = 2,
+} SimScene;
+
 void InitSim(FluidSim *sim);
-void ResetSim(FluidSim *sim, int mode);
+void ResetSim(FluidSim *sim, SimScene scene);
 void UpdateSim(FluidSim *sim, float dt, float time);
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
                 Vector4 color);

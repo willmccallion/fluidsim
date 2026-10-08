@@ -67,10 +67,72 @@ void InitSim(FluidSim *sim) {
                GL_DYNAMIC_READ);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-  ResetSim(sim, 1);
+  ResetSim(sim, SCENE_CAR_WIND_TUNNEL);
 }
 
-void ResetSim(FluidSim *sim, int mode) {
+static void RasterizeCarMask(float *oData) {
+  // Load car silhouette from image.
+  // The image is black car on white background, already flipped to face left.
+  // We threshold: dark pixels (< 128) = solid obstacle.
+  // The image is scaled to fit the simulation grid, vertically centered,
+  // and positioned so the car occupies the left ~60% of the domain.
+  Image carImg = LoadImage("resources/car_mask.png");
+  if (carImg.data != NULL) {
+    ImageFormat(&carImg, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
+
+    // Target region in simulation space — preserve the image's aspect ratio.
+    float aspect = (float)carImg.width / (float)carImg.height;
+    int carW = (int)(RES_X * 0.62f);        // car spans 62% of grid width
+    int carH = (int)(carW / aspect);         // height derived from aspect ratio
+    int carX = (int)(RES_X * 0.05f);        // left margin
+    int carY = (RES_Y - carH) / 2;          // vertically centered
+
+    ImageResize(&carImg, carW, carH);
+
+    unsigned char *pixels = (unsigned char *)carImg.data;
+    for (int iy = 0; iy < carH; iy++) {
+      for (int ix = 0; ix < carW; ix++) {
+        unsigned char grey = pixels[iy * carW + ix];
+        if (grey < 128) {
+          // Texture y=0 is bottom of screen; image y=0 is top — flip vertically
+          int tx = carX + ix;
+          int ty = carY + (carH - 1 - iy);
+          if (tx >= 0 && tx < RES_X && ty >= 0 && ty < RES_Y)
+            oData[ty * RES_X + tx] = 1.0f;
+        }
+      }
+    }
+    UnloadImage(carImg);
+  } else {
+    TraceLog(LOG_WARNING, "Could not load resources/car_mask.png");
+  }
+}
+
+static void RasterizeCircle(float *oData, Vector2 center, float radius) {
+  for (int y = 0; y < RES_Y; y++) {
+    for (int x = 0; x < RES_X; x++) {
+      float dx = (float)x - center.x;
+      float dy = (float)y - center.y;
+      if (dx * dx + dy * dy < radius * radius)
+        oData[y * RES_X + x] = 1.0f;
+    }
+  }
+}
+
+static void UploadSceneObstacles(FluidSim *sim, SimScene scene) {
+  float *oData = (float *)calloc(RES_X * RES_Y, sizeof(float));
+  if (scene == SCENE_CAR_WIND_TUNNEL)
+    RasterizeCarMask(oData);
+  else
+    RasterizeCircle(oData, (Vector2){RES_X * 0.5f, RES_Y * 0.5f},
+                    RES_Y * 0.1f);
+  glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
+                  oData);
+  free(oData);
+}
+
+void ResetSim(FluidSim *sim, SimScene scene) {
   // Reset Smooth Stats
   sim->maxPressureSmooth = 0.1f;
   sim->maxVelocitySmooth = 0.1f;
@@ -104,53 +166,9 @@ void ResetSim(FluidSim *sim, int mode) {
 
   free(zeroData);
 
-  if (mode == 1) {
-    sim->buoyancyStrength = 0.0f;
-    float *oData = (float *)calloc(RES_X * RES_Y, sizeof(float));
-
-    // Load car silhouette from image.
-    // The image is black car on white background, already flipped to face left.
-    // We threshold: dark pixels (< 128) = solid obstacle.
-    // The image is scaled to fit the simulation grid, vertically centered,
-    // and positioned so the car occupies the left ~60% of the domain.
-    Image carImg = LoadImage("resources/car_mask.png");
-    if (carImg.data != NULL) {
-      ImageFormat(&carImg, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
-
-      // Target region in simulation space — preserve the image's aspect ratio.
-      float aspect = (float)carImg.width / (float)carImg.height;
-      int carW = (int)(RES_X * 0.62f);        // car spans 62% of grid width
-      int carH = (int)(carW / aspect);         // height derived from aspect ratio
-      int carX = (int)(RES_X * 0.05f);        // left margin
-      int carY = (RES_Y - carH) / 2;          // vertically centered
-
-      ImageResize(&carImg, carW, carH);
-
-      unsigned char *pixels = (unsigned char *)carImg.data;
-      for (int iy = 0; iy < carH; iy++) {
-        for (int ix = 0; ix < carW; ix++) {
-          unsigned char grey = pixels[iy * carW + ix];
-          if (grey < 128) {
-            // Texture y=0 is bottom of screen; image y=0 is top — flip vertically
-            int tx = carX + ix;
-            int ty = carY + (carH - 1 - iy);
-            if (tx >= 0 && tx < RES_X && ty >= 0 && ty < RES_Y)
-              oData[ty * RES_X + tx] = 1.0f;
-          }
-        }
-      }
-      UnloadImage(carImg);
-    } else {
-      TraceLog(LOG_WARNING, "Could not load resources/car_mask.png");
-    }
-
-    glBindTexture(GL_TEXTURE_2D, sim->texObstacles.id);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RES_X, RES_Y, GL_RED, GL_FLOAT,
-                    oData);
-    free(oData);
-  } else {
-    sim->buoyancyStrength = 8.0f;
-  }
+  sim->buoyancyStrength = scene == SCENE_FREE ? 8.0f : 0.0f;
+  if (scene != SCENE_FREE)
+    UploadSceneObstacles(sim, scene);
 }
 
 void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
