@@ -140,7 +140,7 @@ static bool ExportPalette(const StreaklineFields *fields,
     return false;
   }
   CellRect crop = FrameRect(o->frame, fields->width, fields->height);
-  if (!ExportStreaklineImage(fields, palette, crop, path)) {
+  if (!ExportStreaklineImage(fields, palette, crop, o->supersample, path)) {
     TraceLog(LOG_ERROR, "PNG: Failed to write %s", path);
     return false;
   }

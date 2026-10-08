@@ -27,6 +27,8 @@ typedef struct {
   int pressureVCycles;
   /** Export the most turbulent frame of the last N steps; 0 = final step. */
   int searchSteps;
+  /** Samples per pixel axis when colouring; 1 = one sample per cell. */
+  int supersample;
   const char *outputDir;
 } PngOptions;
 

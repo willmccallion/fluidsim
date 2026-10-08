@@ -16,6 +16,7 @@ PngOptions DefaultPngOptions(void) {
                       .velocitySubsteps = 4,
                       .pressureVCycles = 2,
                       .searchSteps = 500,
+                      .supersample = 2,
                       .outputDir = "output"};
 }
 
@@ -98,6 +99,9 @@ static bool ParseVCycles(const char *v, PngOptions *o) {
 static bool ParseSearchSteps(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 0, 1000000, &o->searchSteps);
 }
+static bool ParseSupersample(const char *v, PngOptions *o) {
+  return ParseIntInRange(v, 1, 4, &o->supersample);
+}
 static bool ParseOutputDir(const char *v, PngOptions *o) {
   o->outputDir = v;
   return v[0] != '\0';
@@ -115,6 +119,7 @@ static const OptionSpec OPTION_SPECS[] = {
     {"--line-width", ParseLineWidth}, {"--wind-kmh", ParseWind},
     {"--vorticity", ParseVorticity}, {"--substeps", ParseSubsteps},
     {"--vcycles", ParseVCycles},     {"--search-steps", ParseSearchSteps},
+    {"--supersample", ParseSupersample},
     {"--out", ParseOutputDir},
 };
 
@@ -172,12 +177,13 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "  --vcycles N       multigrid V-cycles per substep (default %d)\n"
           "  --search-steps N  export the most turbulent of the last N steps\n"
           "                    (default %d, 0 = final step)\n"
+          "  --supersample N   samples per pixel axis, 1-4 (default %d)\n"
           "  --out DIR         output directory (default %s)\n"
           "\n"
           "palettes:",
           program, d.steps, d.scale, d.smokeLineCount, d.smokeLineWidth, d.windKmh,
           d.vorticityStrength, d.velocitySubsteps, d.pressureVCycles,
-          d.searchSteps, d.outputDir);
+          d.searchSteps, d.supersample, d.outputDir);
   for (int i = 0; i < PaletteCount(); i++)
     fprintf(stream, " %s", PaletteAt(i)->name);
   fprintf(stream, "\n");

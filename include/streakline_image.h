@@ -21,11 +21,12 @@ bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out);
 void FreeStreaklineFields(StreaklineFields *fields);
 
 /**
- * Writes the smoke lines inside `crop` as a PNG on black, each pixel
- * coloured by local speed through `palette` (slow = 0, fastest = 1).
+ * Writes the smoke lines inside `crop` as a PNG on black, coloured by local
+ * speed through `palette` (slow = 0, fastest = 1). Each pixel averages
+ * samplesPerAxis^2 bilinear samples to smooth edges.
  */
 bool ExportStreaklineImage(const StreaklineFields *fields,
                            const Palette *palette, CellRect crop,
-                           const char *path);
+                           int samplesPerAxis, const char *path);
 
 #endif
