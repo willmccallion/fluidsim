@@ -40,6 +40,8 @@ static void Simulate(FluidSim *sim, const PngOptions *o) {
   for (int step = 1; step <= o->steps; step++) {
     time += STEP_SECONDS;
     UpdateSimSubstepped(sim, STEP_SECONDS, time, o->velocitySubsteps);
+    // Unbounded queued GPU work made the final readback return zeros.
+    glFinish();
     UpdateProgress(&progress, step);
   }
   FinishProgress(&progress);
