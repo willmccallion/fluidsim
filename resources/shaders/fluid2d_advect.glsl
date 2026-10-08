@@ -68,8 +68,8 @@ void main() {
     
     result = clamp(result, minVal, maxVal);
 
-    // 8. Decay (very gentle — keep smoke bright)
-    result *= 0.9995;
+    // 8. Decay (very gentle — keep smoke bright), 0.9995 per 0.005 s of sim time
+    result *= pow(0.9995, dt / 0.005);
 
     imageStore(texDest, coords, result);
 }
