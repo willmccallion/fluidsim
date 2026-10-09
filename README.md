@@ -1,6 +1,6 @@
 # GPU Fluid Simulation
 
-Real-time 2D incompressible fluid solver using OpenGL 4.3 compute shaders. Cell-centred Navier-Stokes with MacCormack advection, multigrid pressure projection, and vorticity confinement at 2560×1280 resolution.
+Real-time 2D incompressible fluid solver using OpenGL 4.3 compute shaders. Staggered-grid (MAC) Navier-Stokes with MacCormack advection, multigrid pressure projection, and vorticity confinement at 2560×1280 resolution.
 
 ## Features
 
