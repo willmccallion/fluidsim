@@ -17,23 +17,25 @@ uniform float dt;
 uniform float buoyancy;
 uniform vec2 res;
 
+// Centre of the first inlet column, where inflowing values are prescribed.
+const float INFLOW_EDGE_X = 0.5;
+
 void main() {
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
     vec2 pos = vec2(coords) + 0.5;
     vec2 uv = pos / res;
     vec2 texelSize = 1.0 / res;
 
-    // 1. Get Velocity
+    // 1. Get Velocity (pixels per second)
     vec2 vel = texture(texVelocity, uv).xy;
 
-    // 2. Advect Forward (Lagrangian)
-    // Where did this particle come from?
-    vec2 prevPos = uv - vel * dt * texelSize; // Note: vel is in pixels/sec usually, check scaling
-    // If vel is normalized (0..1), remove texelSize. Assuming vel is in pixels:
-    // Actually, in your sim, velocity is likely in pixels. 
-    // Let's assume velocity is in UV space for safety or convert:
-    // Standard approach: uv - (vel * dt * inverse_resolution)
-    vec2 srcUV = uv - (vel * dt * texelSize);
+    // 2. Trace back along the flow. A trace that leaves through the inflow
+    // edge stops there: that fluid entered partway through the step.
+    vec2 displacement = vel * dt;
+    float traceFraction = 1.0;
+    if (displacement.x > 0.0 && pos.x - displacement.x < INFLOW_EDGE_X)
+        traceFraction = max(pos.x - INFLOW_EDGE_X, 0.0) / displacement.x;
+    vec2 srcUV = uv - displacement * traceFraction * texelSize;
 
     // 3. Sample Source (Linear Interpolation)
     vec4 phi_n_1 = texture(texSource, srcUV);
@@ -42,7 +44,7 @@ void main() {
     
     // 4. Advect Backward (where would it go?)
     vec2 vel_prev = texture(texVelocity, srcUV).xy;
-    vec2 backUV = srcUV + (vel_prev * dt * texelSize);
+    vec2 backUV = srcUV + (vel_prev * dt * traceFraction * texelSize);
 
     // 5. Sample Current State at the "back" position
     vec4 phi_n = texture(texSource, backUV);
