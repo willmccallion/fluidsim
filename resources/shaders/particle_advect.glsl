@@ -12,11 +12,20 @@ layout(std430, binding = 0) buffer ParticleBuffer {
     Particle particles[];
 };
 
-layout(binding = 0) uniform sampler2D texVelocity;
+layout(binding = 0) uniform sampler2D texVelocity; // staggered (W+1)x(H+1)
 
 uniform float dt;
 uniform vec2 res;
 uniform float time;
+
+// Texel (i, j) holds u on the left face of cell (i, j) in .x and v on its
+// bottom face in .y. Points are in cell units.
+vec2 SampleVelocity(vec2 p) {
+    vec2 size = vec2(textureSize(texVelocity, 0));
+    float u = texture(texVelocity, (p + vec2(0.5, 0.0)) / size).x;
+    float v = texture(texVelocity, (p + vec2(0.0, 0.5)) / size).y;
+    return vec2(u, v);
+}
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -34,8 +43,7 @@ void main() {
         }
     } else {
         // Sample Velocity
-        vec2 uv = p.pos / res;
-        vec2 vel = texture(texVelocity, uv).xy;
+        vec2 vel = SampleVelocity(p.pos);
         
         p.pos += vel * dt;
         p.life -= dt * 0.5;

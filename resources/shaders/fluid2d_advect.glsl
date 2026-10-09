@@ -1,33 +1,41 @@
 #version 430
 
-// --- MACCORMACK ADVECTION (The "Pro" Standard) ---
-// This technique performs a forward advection, then a backward advection,
-// measures the error, and corrects it. This creates extremely sharp swirls.
-// Crucially, it includes a LIMITER to prevent the "noise" (instability).
+// --- MACCORMACK ADVECTION OF CELL-CENTRED FIELDS (smoke) ---
+// Performs a forward advection, then a backward advection, measures the
+// error, and corrects it, with a limiter against overshoot.
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout(binding = 0) uniform sampler2D texVelocity;
-layout(binding = 1) uniform sampler2D texObstacles;
-layout(binding = 2) uniform sampler2D texSource; // Density or Velocity
+layout(binding = 0) uniform sampler2D texVelocity; // staggered, (W+1)x(H+1)
+layout(binding = 2) uniform sampler2D texSource;   // cell-centred, WxH
 
 layout(binding = 3, rgba32f) uniform writeonly image2D texDest;
 
 uniform float dt;
-uniform float buoyancy;
-uniform vec2 res;
 
 // Centre of the first inlet column, where inflowing values are prescribed.
 const float INFLOW_EDGE_X = 0.5;
 
+// Staggered velocity: texel (i, j) holds u on the left face of cell (i, j)
+// in .x and v on its bottom face in .y. Points are in cell units.
+vec2 SampleVelocity(vec2 p) {
+    vec2 size = vec2(textureSize(texVelocity, 0));
+    float u = texture(texVelocity, (p + vec2(0.5, 0.0)) / size).x;
+    float v = texture(texVelocity, (p + vec2(0.0, 0.5)) / size).y;
+    return vec2(u, v);
+}
+
+vec4 SampleSource(vec2 p) {
+    return texture(texSource, p / vec2(textureSize(texSource, 0)));
+}
+
 void main() {
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(coords, imageSize(texDest)))) return;
     vec2 pos = vec2(coords) + 0.5;
-    vec2 uv = pos / res;
-    vec2 texelSize = 1.0 / res;
 
-    // 1. Get Velocity (pixels per second)
-    vec2 vel = texture(texVelocity, uv).xy;
+    // 1. Velocity at the cell centre (cells per second)
+    vec2 vel = SampleVelocity(pos);
 
     // 2. Trace back along the flow. A trace that leaves through the inflow
     // edge stops there: that fluid entered partway through the step.
@@ -35,42 +43,25 @@ void main() {
     float traceFraction = 1.0;
     if (displacement.x > 0.0 && pos.x - displacement.x < INFLOW_EDGE_X)
         traceFraction = max(pos.x - INFLOW_EDGE_X, 0.0) / displacement.x;
-    vec2 srcUV = uv - displacement * traceFraction * texelSize;
+    vec2 src = pos - displacement * traceFraction;
 
-    // 3. Sample Source (Linear Interpolation)
-    vec4 phi_n_1 = texture(texSource, srcUV);
+    // 3. Forward estimate
+    vec4 forward = SampleSource(src);
 
-    // --- MACCORMACK CORRECTION ---
-    
-    // 4. Advect Backward (where would it go?)
-    vec2 vel_prev = texture(texVelocity, srcUV).xy;
-    vec2 backUV = srcUV + (vel_prev * dt * traceFraction * texelSize);
+    // 4. Trace forward again from the source and measure the round-trip error
+    vec2 back = src + SampleVelocity(src) * dt * traceFraction;
+    vec4 error = (SampleSource(back) - SampleSource(pos)) * 0.5;
+    vec4 result = forward - error;
 
-    // 5. Sample Current State at the "back" position
-    vec4 phi_n = texture(texSource, backUV);
-    
-    // 6. Calculate Error: (Original - Backtraced)
-    vec4 currentVal = texture(texSource, uv);
-    vec4 error = (phi_n - currentVal) * 0.5;
+    // 5. Limiter: clamp to the neighbours of the source point
+    vec4 s0 = SampleSource(src + vec2(-1.0, 0.0));
+    vec4 s1 = SampleSource(src + vec2( 1.0, 0.0));
+    vec4 s2 = SampleSource(src + vec2(0.0, -1.0));
+    vec4 s3 = SampleSource(src + vec2(0.0,  1.0));
+    result = clamp(result, min(min(s0, s1), min(s2, s3)),
+                   max(max(s0, s1), max(s2, s3)));
 
-    // 7. Corrected Result
-    vec4 result = phi_n_1 - error;
-
-    // --- LIMITER (THE NOISE FIX) ---
-    // The correction above can produce values outside the valid range (noise).
-    // We clamp the result to the min/max of the 4 neighbors of the source pixel.
-    
-    vec4 s0 = texture(texSource, srcUV + vec2(-texelSize.x, 0.0));
-    vec4 s1 = texture(texSource, srcUV + vec2( texelSize.x, 0.0));
-    vec4 s2 = texture(texSource, srcUV + vec2(0.0, -texelSize.y));
-    vec4 s3 = texture(texSource, srcUV + vec2(0.0,  texelSize.y));
-    
-    vec4 minVal = min(min(s0, s1), min(s2, s3));
-    vec4 maxVal = max(max(s0, s1), max(s2, s3));
-    
-    result = clamp(result, minVal, maxVal);
-
-    // 8. Decay (very gentle — keep smoke bright), 0.9995 per 0.005 s of sim time
+    // 6. Decay (very gentle — keep smoke bright), 0.9995 per 0.005 s of sim time
     result *= pow(0.9995, dt / 0.005);
 
     imageStore(texDest, coords, result);

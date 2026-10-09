@@ -11,6 +11,11 @@ static void DispatchOverGrid(const FluidSim *sim) {
   rlComputeShaderDispatch(GroupCount(sim->width), GroupCount(sim->height), 1);
 }
 
+static void DispatchOverFaces(const FluidSim *sim) {
+  rlComputeShaderDispatch(GroupCount(sim->width + 1),
+                          GroupCount(sim->height + 1), 1);
+}
+
 void InitSim(FluidSim *sim, int width, int height) {
   sim->width = width;
   sim->height = height;
@@ -35,8 +40,8 @@ void InitSim(FluidSim *sim, int width, int height) {
   // Create Textures
   sim->texDensity[0] = CreateTexture2D(width, height, GL_RGBA32F);
   sim->texDensity[1] = CreateTexture2D(width, height, GL_RGBA32F);
-  sim->texVelocity[0] = CreateTexture2D(width, height, GL_RGBA32F);
-  sim->texVelocity[1] = CreateTexture2D(width, height, GL_RGBA32F);
+  sim->texVelocity[0] = CreateTexture2D(width + 1, height + 1, GL_RGBA32F);
+  sim->texVelocity[1] = CreateTexture2D(width + 1, height + 1, GL_RGBA32F);
   sim->texPressure = CreateTexture2D(width, height, GL_R32F);
   sim->texDivergence = CreateTexture2D(width, height, GL_R32F);
   sim->texCurl = CreateTexture2D(width, height, GL_R32F);
@@ -45,6 +50,8 @@ void InitSim(FluidSim *sim, int width, int height) {
   // Load Shaders
   sim->shdAdvect =
       LoadCompute(LoadFileText("resources/shaders/fluid2d_advect.glsl"));
+  sim->shdAdvectVelocity = LoadCompute(
+      LoadFileText("resources/shaders/fluid2d_advect_velocity.glsl"));
   sim->shdDivergence =
       LoadCompute(LoadFileText("resources/shaders/fluid2d_div.glsl"));
   sim->shdSubtract =
@@ -228,15 +235,15 @@ void ResetSim(FluidSim *sim, SimScene scene) {
   sim->maxPressureSmooth = 0.1f;
   sim->maxVelocitySmooth = 0.1f;
 
-  float *zeroData =
-      (float *)calloc((size_t)sim->width * sim->height * 4, sizeof(float));
+  float *zeroData = (float *)calloc(
+      (size_t)(sim->width + 1) * (sim->height + 1) * 4, sizeof(float));
 
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[0].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
-                  zeroData);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width + 1, sim->height + 1,
+                  GL_RGBA, GL_FLOAT, zeroData);
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[1].id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
-                  zeroData);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width + 1, sim->height + 1,
+                  GL_RGBA, GL_FLOAT, zeroData);
 
   glBindTexture(GL_TEXTURE_2D, sim->texDensity[0].id);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sim->width, sim->height, GL_RGBA, GL_FLOAT,
@@ -283,7 +290,7 @@ void ApplySplat(FluidSim *sim, Texture2D_GL tex, Vector2 pos, float radius,
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdSplat, "color"), &color,
                RL_SHADER_UNIFORM_VEC4, 1);
-  DispatchOverGrid(sim);
+  rlComputeShaderDispatch(GroupCount(tex.width), GroupCount(tex.height), 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
 }
@@ -362,15 +369,12 @@ static void DispatchAerodynamicForces(FluidSim *sim) {
   rlDisableShader();
 }
 
-/** Semi-Lagrangian advection of `src` into `dst` by the current velocity. */
-static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
-                   float dt) {
-  Vector2 res = {(float)sim->width, (float)sim->height};
-  rlEnableShader(sim->shdAdvect);
-  rlSetUniform(rlGetLocationUniform(sim->shdAdvect, "dt"), &dt,
-               RL_SHADER_UNIFORM_FLOAT, 1);
-  rlSetUniform(rlGetLocationUniform(sim->shdAdvect, "res"), &res,
-               RL_SHADER_UNIFORM_VEC2, 1);
+/** MacCormack advection of `src` into `dst` by the current velocity. */
+static void Advect(FluidSim *sim, unsigned int shader, Texture2D_GL src,
+                   Texture2D_GL dst, float dt) {
+  rlEnableShader(shader);
+  rlSetUniform(rlGetLocationUniform(shader, "dt"), &dt, RL_SHADER_UNIFORM_FLOAT,
+               1);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, sim->texVelocity[sim->velocityPing].id);
   glActiveTexture(GL_TEXTURE1);
@@ -378,19 +382,21 @@ static void Advect(FluidSim *sim, Texture2D_GL src, Texture2D_GL dst,
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_2D, src.id);
   glBindImageTexture(3, dst.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-  DispatchOverGrid(sim);
+  rlComputeShaderDispatch(GroupCount(dst.width), GroupCount(dst.height), 1);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 }
 
 static void AdvectDensity(FluidSim *sim, float dt) {
   int next = !sim->densityPing;
-  Advect(sim, sim->texDensity[sim->densityPing], sim->texDensity[next], dt);
+  Advect(sim, sim->shdAdvect, sim->texDensity[sim->densityPing],
+         sim->texDensity[next], dt);
   sim->densityPing = next;
 }
 
 static void StepVelocity(FluidSim *sim, float dt, float time) {
   int next = !sim->velocityPing;
-  Advect(sim, sim->texVelocity[sim->velocityPing], sim->texVelocity[next], dt);
+  Advect(sim, sim->shdAdvectVelocity, sim->texVelocity[sim->velocityPing],
+         sim->texVelocity[next], dt);
   sim->velocityPing = next;
   int p = sim->velocityPing;
 
@@ -413,7 +419,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                  &sim->inletTurbulence, RL_SHADER_UNIFORM_FLOAT, 1);
     rlSetUniform(rlGetLocationUniform(sim->shdInlet, "seed"), &sim->inletSeed,
                  RL_SHADER_UNIFORM_FLOAT, 1);
-    rlComputeShaderDispatch(2, GroupCount(sim->height), 1);
+    rlComputeShaderDispatch(2, GroupCount(sim->height + 1), 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     rlDisableShader();
   }
@@ -436,7 +442,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                RL_SHADER_UNIFORM_FLOAT, 1);
   rlSetUniform(rlGetLocationUniform(sim->shdVorticity, "curlStrength"),
                &sim->vorticityStrength, RL_SHADER_UNIFORM_FLOAT, 1);
-  DispatchOverGrid(sim);
+  DispatchOverFaces(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   // 5. Divergence
@@ -461,7 +467,7 @@ static void StepVelocity(FluidSim *sim, float dt, float time) {
                      GL_RGBA32F);
   glBindImageTexture(2, sim->texObstacles.id, 0, GL_FALSE, 0, GL_READ_ONLY,
                      GL_R32F);
-  DispatchOverGrid(sim);
+  DispatchOverFaces(sim);
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
   rlDisableShader();
 

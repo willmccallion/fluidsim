@@ -7,7 +7,7 @@
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(binding = 0, r32f) uniform image2D texPressure;
-layout(binding = 1, rgba32f) uniform image2D texVelocity;
+layout(binding = 1, rgba32f) uniform image2D texVelocity; // staggered (W+1)x(H+1)
 layout(binding = 2, r32f) uniform image2D texCurl;
 
 // Output Buffer (Atomic Max requires uint)
@@ -25,7 +25,10 @@ void main() {
 
     // 1. Sample Data
     float p = abs(imageLoad(texPressure, uv).r);
-    float v = length(imageLoad(texVelocity, uv).xy);
+    vec2 face0 = imageLoad(texVelocity, uv).xy;
+    float cellU = 0.5 * (face0.x + imageLoad(texVelocity, uv + ivec2(1, 0)).x);
+    float cellV = 0.5 * (face0.y + imageLoad(texVelocity, uv + ivec2(0, 1)).y);
+    float v = length(vec2(cellU, cellV));
     float c = abs(imageLoad(texCurl, uv).r);
 
     // 2. Atomic Max

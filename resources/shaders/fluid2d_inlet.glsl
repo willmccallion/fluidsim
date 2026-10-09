@@ -29,31 +29,39 @@ float ValueNoise(vec2 p) {
     return mix(bottom, top, u.y) * 2.0 - 1.0;
 }
 
+float GustNoise(float y, float offset) {
+    vec2 p = vec2(y * GUST_BUMPS_PER_HEIGHT, time * GUST_CHANGES_PER_SECOND);
+    return ValueNoise(p + vec2(offset, offset * 0.3));
+}
+
 void main() {
+    // texVel is staggered: (W+1)x(H+1), u on left faces, v on bottom faces.
     ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 size = imageSize(texVel);
+    ivec2 cells = imageSize(texDens);
 
     // Only run on the Inlet (Left Edge)
-    if (coords.x < 10) {
+    if (coords.x < 10 && coords.y <= cells.y) {
         // 1. Force the inflow velocity, optionally with gusts
-        vec2 gustPos = vec2(float(coords.y) / float(size.y) * GUST_BUMPS_PER_HEIGHT,
-                            time * GUST_CHANGES_PER_SECOND);
-        vec2 gust = vec2(ValueNoise(gustPos), ValueNoise(gustPos + vec2(37.0, 11.0)));
-        vec2 inflow = windSpeed * (vec2(1.0, 0.0) + turbulence * gust);
-        imageStore(texVel, coords, vec4(inflow, 0.0, 0.0));
+        float uFaceY = (float(coords.y) + 0.5) / float(cells.y);
+        float vFaceY = float(coords.y) / float(cells.y);
+        float u = windSpeed * (1.0 + turbulence * GustNoise(uFaceY, 0.0));
+        bool wallFace = coords.y == 0 || coords.y == cells.y;
+        float v = wallFace ? 0.0 : windSpeed * turbulence * GustNoise(vFaceY, 37.0);
+        imageStore(texVel, coords, vec4(coords.y < cells.y ? u : 0.0, v, 0.0, 0.0));
 
         // 2. Smoke rake — evenly-spaced streamlines
-        float spacing  = size.y / float(lineCount);
+        float spacing  = cells.y / float(lineCount);
         float dist     = abs(mod(float(coords.y), spacing) - spacing * 0.5);
 
         // Crisp lines with soft edges
         float smoke = smoothstep(lineHalfWidth * 1.75, lineHalfWidth, dist);
 
         // Allow lines across 10-90% of height (wider coverage)
-        if (coords.y < int(size.y * 0.10) || coords.y > int(size.y * 0.90))
+        if (coords.y < int(cells.y * 0.10) || coords.y > int(cells.y * 0.90))
             smoke = 0.0;
 
         // Store brightness in RGB, alpha encodes presence for discard test
-        imageStore(texDens, coords, vec4(smoke, smoke, smoke, smoke));
+        if (coords.y < cells.y)
+            imageStore(texDens, coords, vec4(smoke, smoke, smoke, smoke));
     }
 }

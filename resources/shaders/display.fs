@@ -6,7 +6,7 @@ in vec4 fragColor;
 out vec4 finalColor;
 
 uniform sampler2D texture0; // Smoke/density
-uniform sampler2D texture1; // Data (pressure / velocity / curl)
+uniform sampler2D texture1; // Data (pressure / velocity / curl); velocity is staggered
 uniform vec4 colDiffuse;
 uniform int mode;
 
@@ -26,6 +26,15 @@ vec3 getCurlColor(float t) {
     t = clamp(t, -1.0, 1.0);
     if (t < 0.0) return mix(vec3(0.0), vec3(0.1, 0.4, 1.0), -t);
     else         return mix(vec3(0.0), vec3(1.0, 0.2, 0.05), t);
+}
+
+// Staggered velocity: texel (i, j) holds u on the left face of cell (i, j)
+// in .x and v on its bottom face in .y. Points are in cell units.
+vec2 SampleVelocity(vec2 p) {
+    vec2 size = vec2(textureSize(texture1, 0));
+    float u = texture(texture1, (p + vec2(0.5, 0.0)) / size).x;
+    float v = texture(texture1, (p + vec2(0.0, 0.5)) / size).y;
+    return vec2(u, v);
 }
 
 void main() {
@@ -56,7 +65,8 @@ void main() {
 
     // --- Mode 2: Velocity ---
     if (mode == 2) {
-        float speed = length(texture(texture1, fragTexCoord).xy);
+        vec2 cells = vec2(textureSize(texture0, 0));
+        float speed = length(SampleVelocity(fragTexCoord * cells));
         float norm  = clamp(speed / max(maxVelocity, 0.0001), 0.0, 1.0);
         vec3  col   = getSpectrum(norm);
         float smoke = clamp(length(dense.rgb) * 2.0, 0.0, 1.0);

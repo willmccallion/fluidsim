@@ -137,6 +137,33 @@ static bool CropFitsFields(const StreaklineFields *f, CellRect crop) {
          crop.x + crop.width <= f->width && crop.y + crop.height <= f->height;
 }
 
+/** Averages staggered face velocities ((W+1)x(H+1), u left, v bottom) onto
+ * cell centres. */
+static void CentreVelocity(const float *faces, int width, int height,
+                           float *centred) {
+  size_t stride = (size_t)width + 1;
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      size_t face = (size_t)y * stride + x;
+      size_t cell = (size_t)y * width + x;
+      centred[2 * cell] = 0.5f * (faces[2 * face] + faces[2 * (face + 1)]);
+      centred[2 * cell + 1] =
+          0.5f * (faces[2 * face + 1] + faces[2 * (face + stride) + 1]);
+    }
+  }
+}
+
+static bool ReadCentredVelocity(const FluidSim *sim, float *centred) {
+  size_t faceCount = (size_t)(sim->width + 1) * (sim->height + 1);
+  float *faces = malloc(faceCount * 2 * sizeof(float));
+  if (faces == NULL)
+    return false;
+  ReadTextureFloats(sim->texVelocity[sim->velocityPing], GL_RG, faces);
+  CentreVelocity(faces, sim->width, sim->height, centred);
+  free(faces);
+  return true;
+}
+
 bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out) {
   size_t cellCount = (size_t)sim->width * sim->height;
   StreaklineFields f = {.velocityRG = malloc(cellCount * 2 * sizeof(float)),
@@ -150,7 +177,10 @@ bool ReadStreaklineFields(const FluidSim *sim, StreaklineFields *out) {
   }
 
   glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT);
-  ReadTextureFloats(sim->texVelocity[sim->velocityPing], GL_RG, f.velocityRG);
+  if (!ReadCentredVelocity(sim, f.velocityRG)) {
+    FreeStreaklineFields(&f);
+    return false;
+  }
   ReadTextureFloats(sim->texDensity[sim->densityPing], GL_RGB, f.smokeRGB);
   ReadTextureFloats(sim->texObstacles, GL_RED, f.obstacles);
   *out = f;

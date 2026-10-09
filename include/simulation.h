@@ -12,13 +12,15 @@ typedef struct {
   int width;
   int height;
   Texture2D_GL texDensity[2];
+  /** Staggered, (width+1)x(height+1): u on left faces, v on bottom faces. */
   Texture2D_GL texVelocity[2];
   Texture2D_GL texPressure;
   Texture2D_GL texDivergence;
   Texture2D_GL texCurl;
   Texture2D_GL texObstacles;
 
-  unsigned int shdAdvect, shdDivergence, shdSubtract, shdCurl, shdVorticity;
+  unsigned int shdAdvect, shdAdvectVelocity, shdDivergence, shdSubtract,
+      shdCurl, shdVorticity;
   unsigned int shdSplat, shdInlet, shdPaint;
   unsigned int shdForce;
 
