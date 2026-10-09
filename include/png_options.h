@@ -6,18 +6,14 @@
 #include <stddef.h>
 #include <stdio.h>
 
-typedef enum {
-  FRAME_SQUARE,
-  FRAME_WIDE,
-} FrameKind;
-
 typedef struct {
   int steps;
   /** Grid multiplier over the 2560x1280 default; image detail scales too. */
   int scale;
   /** NULL renders every palette. */
   const Palette *palette;
-  FrameKind frame;
+  /** Output width / height; the crop is as large as the domain allows. */
+  float frameAspect;
   ObstacleShape shape;
   int smokeLineCount;
   /** Line width in default-grid cells; multiplied by `scale`. */

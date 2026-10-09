@@ -8,7 +8,7 @@ PngOptions DefaultPngOptions(void) {
   return (PngOptions){.steps = 2000,
                       .scale = 1,
                       .palette = NULL,
-                      .frame = FRAME_SQUARE,
+                      .frameAspect = 1.0f,
                       .shape = DefaultObstacleShape(),
                       .smokeLineCount = 60,
                       .smokeLineWidth = 5.0f,
@@ -45,16 +45,34 @@ static bool ParseFloatInRange(const char *text, float min, float max,
   return true;
 }
 
-static bool ParseFrame(const char *text, FrameKind *out) {
+/** "square", "wide" (2:1, the whole domain) or an aspect ratio "W:H". */
+static bool ParseFrame(const char *text, float *outAspect) {
   if (strcmp(text, "square") == 0) {
-    *out = FRAME_SQUARE;
+    *outAspect = 1.0f;
     return true;
   }
   if (strcmp(text, "wide") == 0) {
-    *out = FRAME_WIDE;
+    *outAspect = 2.0f;
     return true;
   }
-  return false;
+
+  const char *colon = strchr(text, ':');
+  if (colon == NULL || colon - text >= 16)
+    return false;
+  char widthText[16];
+  memcpy(widthText, text, (size_t)(colon - text));
+  widthText[colon - text] = '\0';
+
+  int w = 0;
+  int h = 0;
+  if (!ParseIntInRange(widthText, 1, 100000, &w) ||
+      !ParseIntInRange(colon + 1, 1, 100000, &h))
+    return false;
+  float aspect = (float)w / (float)h;
+  if (aspect < 0.1f || aspect > 10.0f)
+    return false;
+  *outAspect = aspect;
+  return true;
 }
 
 static bool ParsePalette(const char *text, const Palette **out) {
@@ -92,7 +110,7 @@ static bool ParsePaletteOption(const char *v, PngOptions *o) {
   return ParsePalette(v, &o->palette);
 }
 static bool ParseFrameOption(const char *v, PngOptions *o) {
-  return ParseFrame(v, &o->frame);
+  return ParseFrame(v, &o->frameAspect);
 }
 static bool ParseLines(const char *v, PngOptions *o) {
   return ParseIntInRange(v, 1, 640, &o->smokeLineCount);
@@ -194,7 +212,8 @@ void PrintPngUsage(FILE *stream, const char *program) {
           "  --steps N         simulation steps of 0.005 s (default %d)\n"
           "  --scale N         grid resolution multiplier 1-4 (default %d)\n"
           "  --palette NAME    palette name or 'all' (default all)\n"
-          "  --frame KIND      square or wide (default square)\n"
+          "  --frame F         square, wide (2:1) or W:H such as 16:10\n"
+          "                    (default square)\n"
           "  --shape S         'circle' or a silhouette PNG; dark opaque\n"
           "                    pixels are solid (default circle)\n"
           "  --shape-x F       shape centre, fraction of width (default %.2f)\n"

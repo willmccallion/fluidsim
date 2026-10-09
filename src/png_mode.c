@@ -9,7 +9,7 @@
 
 #define STEP_SECONDS 0.005f
 #define KMH_PER_SPEED_UNIT (350.0f / 4000.0f)
-#define SQUARE_FRAME_SHAPE_FRACTION 0.22f
+#define FRAME_SHAPE_FRACTION 0.22f
 #define SEARCH_INTERVAL_STEPS 20
 
 /** Tracks the most turbulent frame seen while the simulation runs. */
@@ -22,19 +22,30 @@ typedef struct {
   double bestScore;
 } FrameSearch;
 
-/** Square frames put the shape near the left so the wake fills the rest. */
-static CellRect FrameRect(const PngOptions *o, int width, int height) {
-  if (o->frame == FRAME_WIDE)
-    return (CellRect){0, 0, width, height};
+static int ClampInt(int value, int lo, int hi) {
+  if (value < lo)
+    return lo;
+  return value > hi ? hi : value;
+}
 
-  int size = height;
+/** Largest crop of the requested aspect; the shape sits near the left so the
+ * wake fills the rest, and is centred vertically when the crop is shorter. */
+static CellRect FrameRect(const PngOptions *o, int width, int height) {
+  int cropWidth = (int)lroundf(o->frameAspect * (float)height);
+  int cropHeight = height;
+  if (cropWidth > width) {
+    cropWidth = width;
+    cropHeight = ClampInt((int)lroundf((float)width / o->frameAspect), 1,
+                          height);
+  }
+
   float shapeX = (float)width * o->shape.centerX;
-  int x = (int)lroundf(shapeX - SQUARE_FRAME_SHAPE_FRACTION * (float)size);
-  if (x < 0)
-    x = 0;
-  if (x > width - size)
-    x = width - size;
-  return (CellRect){x, 0, size, size};
+  float shapeY = (float)height * o->shape.centerY;
+  int x = (int)lroundf(shapeX - FRAME_SHAPE_FRACTION * (float)cropWidth);
+  int y = (int)lroundf(shapeY - 0.5f * (float)cropHeight);
+  return (CellRect){ClampInt(x, 0, width - cropWidth),
+                    ClampInt(y, 0, height - cropHeight), cropWidth,
+                    cropHeight};
 }
 
 static void ApplyOptions(FluidSim *sim, const PngOptions *o) {
