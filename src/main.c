@@ -267,9 +267,7 @@ int main(int argc, char **argv) {
       // Helper macro: semi-transparent rounded panel
       float rad = 0.08f;
 
-      // ================================================================
-      // TOP-LEFT: Sim info panel
-      // ================================================================
+      // Top-left: Sim info panel.
       int pX = 14, pY = 14, pW = 280, pH = 102;
       DrawRectangleRounded((Rectangle){pX, pY, pW, pH}, rad, 8, cPanel);
       DrawRectangleRoundedLines((Rectangle){pX, pY, pW, pH}, rad, 8, cBorder);
@@ -313,9 +311,7 @@ int main(int argc, char **argv) {
       // Keybinds hint (very subtle)
       DrawText("[V] view  [F/G] wind ±10km/h  [Space] particles  [H] hide  [2] reset", pX + 10, pY + 84, 8, (Color){80, 85, 100, 200});
 
-      // ================================================================
-      // BOTTOM-LEFT: Aerodynamics telemetry panel (wind tunnel only)
-      // ================================================================
+      // Bottom-left: Aerodynamics telemetry panel (wind tunnel only).
       if (sim.enableWindTunnel) {
         int tX = 14, tH = 178, tW = 310, tY = sh - tH - 14;
         DrawRectangleRounded((Rectangle){tX, tY, tW, tH}, rad, 8, cPanel);
@@ -379,9 +375,7 @@ int main(int argc, char **argv) {
         }
       }
 
-      // ================================================================
-      // TOP-RIGHT: View mode legend pill
-      // ================================================================
+      // Top-right: View mode legend pill.
       {
         const char *hint = "[V] Smoke · Pressure · Velocity · Vorticity";
         int hintW = MeasureText(hint, 9);
